@@ -7,7 +7,7 @@ PathForge is an experimental, cross-platform engineering application being devel
 Rather than becoming a racing game, PathForge is intended to be a workspace for **experimentation, visualization, and engineering analysis**. The project starts with motorsport applications and may later expand into robotics and autonomous racing.
 
 > [!IMPORTANT]
-> **Project status: planning / pre-alpha.** The features and architecture described below are development goals, not implemented capabilities. There is no usable release or verified performance data yet.
+> **Project status: pre-alpha.** Implemented so far: a Qt-free geometry library (paths, arc length, curvature, synthetic circle), a CLI, a Qt 6 Studio viewport and unit tests. Everything else described below is a development goal, not an implemented capability. There is no release or performance data yet.
 
 ## Why PathForge?
 
@@ -34,7 +34,7 @@ The project is guided by a few principles:
 | **Headless tools** | Command-line experiments and benchmarks without launching Qt |
 | **Robotics extensions** | Future path planning, obstacle scenarios, and autonomous racing research |
 
-All entries above are **planned**, not available in the current repository.
+Only the geometry foundation listed in the status note above exists today; all other entries are **planned**.
 
 ## Engineering approach
 
@@ -127,8 +127,8 @@ A numerical solver will be selected when its requirements are clear; one will no
 
 ## Roadmap
 
-- [ ] **Phase 0 — Foundation:** CMake project, Qt shell, test harness, CI, coding conventions.
-- [ ] **Phase 1 — Track geometry:** Centerlines, boundaries, splines, curvature, 2D visualization, serialization.
+- [x] **Phase 0 — Foundation:** CMake project, Qt shell, test harness, CI configuration, coding conventions (CI results unverified until first run on GitHub).
+- [ ] **Phase 1 — Track geometry** *(started: paths, arc length, curvature, circle, viewport)*: Centerlines, boundaries, splines, curvature, 2D visualization, serialization.
 - [ ] **Phase 2 — First lap simulation (`v0.1` goal):** Point-mass model, speed profile, braking constraints, estimated lap time, headless execution.
 - [ ] **Phase 3 — Racing-line optimization:** Shortest path, minimum curvature, physical/geometric comparison.
 - [ ] **Phase 4 — Experiments and telemetry:** Parameter sweeps, plots, export, regression and performance benchmarks.
@@ -141,7 +141,15 @@ The **first meaningful milestone** is intentionally limited: define a track and 
 
 ## Building and running
 
-**Not available yet.** Platform-specific build, installation, and test instructions will be added alongside the first compilable implementation. Until then, this README describes the direction of the project rather than a runnable product.
+```bash
+cmake --preset default
+cmake --build --preset default
+ctest --preset default
+./build/release/apps/pathforge-cli/pathforge-cli circle --radius 100 --points 360
+```
+
+PathForge Studio is built automatically when Qt 6 is found. See [docs/building.md](docs/building.md) for options,
+platform notes and verification status, and [docs/architecture.md](docs/architecture.md) for the design.
 
 ## Validation and benchmarking
 
@@ -160,7 +168,7 @@ Experimental results should report their **model assumptions and limitations**. 
 
 PathForge is a **non-commercial personal research project**: I am building it to learn, experiment, and share engineering work, not to sell a product. The intention is to publish the code openly and welcome technical contributions as the project matures.
 
-Contribution guidelines and a final source-code license will be added before the first substantive public code release. Until a license file is published, **no permission to reuse or redistribute source code should be assumed**. Note that a standard open-source license may permit third-party commercial use even though this project itself has no commercial purpose.
+PathForge is released under the [MIT License](LICENSE). See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. Note that the MIT license permits third-party commercial use even though this project itself has no commercial purpose.
 
 At the planning stage, the most useful feedback concerns numerical methods, vehicle modeling assumptions, test design, and maintainable C++ architecture.
 
