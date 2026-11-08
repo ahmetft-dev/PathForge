@@ -31,3 +31,5 @@ else()
     target_compile_options(pathforge_warnings INTERFACE -Werror)
   endif()
 endif()
+
+add_subdirectory(libs/geometry)
