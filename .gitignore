@@ -1,0 +1,20 @@
+# Build outputs
+build/
+out/
+cmake-build-*/
+CMakeUserPresets.json
+CMakeLists.txt.user
+compile_commands.json
+
+# IDEs / OS
+.vscode/
+.idea/
+.vs/
+.DS_Store
+*.user
+
+# Qt generated
+*_autogen/
+moc_*.cpp
+ui_*.h
+*.log
