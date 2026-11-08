@@ -34,6 +34,10 @@ endif()
 
 add_subdirectory(libs/geometry)
 
+if(PATHFORGE_BUILD_CLI)
+  add_subdirectory(apps/pathforge-cli)
+endif()
+
 if(PATHFORGE_BUILD_TESTS)
   enable_testing()
   add_subdirectory(tests)
