@@ -1,10 +1,9 @@
 // pathforge-cli: headless front-end for the PathForge computation libraries (no Qt).
-#include <pathforge/geometry/circle.hpp>
-
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <pathforge/geometry/circle.hpp>
 #include <string>
 
 using namespace pathforge::geometry;
@@ -55,7 +54,8 @@ int runCircle(int argc, char** argv) {
     const std::string a = argv[i];
     if ((a == "--radius" || a == "--points") && i + 1 >= argc) return fail(a + " requires a value");
     if (a == "--radius") {
-      if (!parseDouble(argv[++i], radius) || radius <= 0.0) return fail("--radius must be a finite number > 0");
+      if (!parseDouble(argv[++i], radius) || radius <= 0.0)
+        return fail("--radius must be a finite number > 0");
     } else if (a == "--points") {
       if (!parseCount(argv[++i], points)) return fail("--points must be an integer >= 3");
     } else {
@@ -75,8 +75,8 @@ int runCircle(int argc, char** argv) {
     std::printf("  points                     : %zu\n", st.pointCount);
     std::printf("  computed length            : %.9f m\n", st.length);
     std::printf("  analytical circumference   : %.9f m  (2*pi*R)\n", exact);
-    std::printf("  length error vs 2*pi*R     : %.3e m  (relative %.3e; discretisation)\n",
-                exact - st.length, (exact - st.length) / exact);
+    std::printf("  length error vs 2*pi*R     : %.3e m  (relative %.3e; discretisation)\n", exact - st.length,
+                (exact - st.length) / exact);
     std::printf("  inscribed N-gon perimeter  : %.9f m  (reference for the sampled path)\n", inscribed);
     std::printf("  length error vs N-gon      : %.3e m  (rounding)\n", st.length - inscribed);
     std::printf("  segment length min / max   : %.9f / %.9f m\n", st.minSegment, st.maxSegment);

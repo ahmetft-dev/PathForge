@@ -1,10 +1,9 @@
 #pragma once
 
-#include <pathforge/geometry/path.hpp>
-
 #include <QGraphicsPathItem>
 #include <QGraphicsScene>
 #include <QGraphicsView>
+#include <pathforge/geometry/path.hpp>
 
 // 2D track viewport. World coordinates are meters with y up; the scene stores
 // (x, -y) because Qt's y axis points down. No geometry is computed here: the view

@@ -1,8 +1,7 @@
 #pragma once
 
-#include <pathforge/geometry/path.hpp>
-
 #include <cstddef>
+#include <pathforge/geometry/path.hpp>
 
 namespace pathforge::geometry {
 

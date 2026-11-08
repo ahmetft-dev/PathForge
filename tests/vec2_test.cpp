@@ -1,9 +1,8 @@
-#include <pathforge/geometry/vec2.hpp>
-
 #include <gtest/gtest.h>
 
 #include <cmath>
 #include <limits>
+#include <pathforge/geometry/vec2.hpp>
 
 using namespace pathforge::geometry;
 

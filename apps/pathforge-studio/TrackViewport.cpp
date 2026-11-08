@@ -3,7 +3,6 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QWheelEvent>
-
 #include <algorithm>
 #include <cmath>
 
@@ -111,9 +110,11 @@ void TrackViewport::drawBackground(QPainter* painter, const QRectF& rect) {
     pen.setCosmetic(true);
     painter->setPen(pen);
     const double x0 = std::floor(rect.left() / step) * step;
-    for (double x = x0; x <= rect.right(); x += step) painter->drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()));
+    for (double x = x0; x <= rect.right(); x += step)
+      painter->drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()));
     const double y0 = std::floor(rect.top() / step) * step;
-    for (double y = y0; y <= rect.bottom(); y += step) painter->drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y));
+    for (double y = y0; y <= rect.bottom(); y += step)
+      painter->drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y));
   };
   // Guard against pathological line counts at extreme zoom-out.
   if (rect.width() / minor < 500 && rect.height() / minor < 500) drawLines(minor, QColor(0x22, 0x26, 0x2d));

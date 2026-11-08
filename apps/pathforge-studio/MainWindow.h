@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QMainWindow>
+#include <QMap>
+#include <QString>
 
 class QComboBox;
 class QDoubleSpinBox;

@@ -1,7 +1,6 @@
-#include <pathforge/geometry/circle.hpp>
-
 #include <cmath>
 #include <numbers>
+#include <pathforge/geometry/circle.hpp>
 #include <vector>
 
 namespace pathforge::geometry {

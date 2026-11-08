@@ -1,9 +1,5 @@
 #include "MainWindow.h"
 
-#include "TrackViewport.h"
-
-#include <pathforge/geometry/circle.hpp>
-
 #include <QAction>
 #include <QComboBox>
 #include <QDockWidget>
@@ -17,6 +13,9 @@
 #include <QStatusBar>
 #include <QToolBar>
 #include <QVBoxLayout>
+#include <pathforge/geometry/circle.hpp>
+
+#include "TrackViewport.h"
 
 namespace pg = pathforge::geometry;
 
@@ -110,8 +109,9 @@ QWidget* MainWindow::buildSidebar() {
 QWidget* MainWindow::buildDiagnostics() {
   auto* w = new QWidget;
   auto* form = new QFormLayout(w);
-  for (const char* key : {"Track length", "Points", "Closed", "Segment min", "Segment max", "Curvature min",
-                          "Curvature max", "Mean |curvature|", "Reference 2πR", "Length error", "Reference 1/R"}) {
+  for (const char* key :
+       {"Track length", "Points", "Closed", "Segment min", "Segment max", "Curvature min", "Curvature max",
+        "Mean |curvature|", "Reference 2πR", "Length error", "Reference 1/R"}) {
     auto* v = new QLabel("–");
     v->setTextInteractionFlags(Qt::TextSelectableByMouse);
     form->addRow(QString(key) + ":", v);

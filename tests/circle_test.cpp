@@ -1,10 +1,9 @@
-#include <pathforge/geometry/circle.hpp>
-
 #include <gtest/gtest.h>
 
 #include <cmath>
 #include <limits>
 #include <numbers>
+#include <pathforge/geometry/circle.hpp>
 
 using namespace pathforge::geometry;
 

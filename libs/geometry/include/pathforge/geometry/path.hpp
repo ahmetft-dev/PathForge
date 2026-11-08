@@ -1,8 +1,7 @@
 #pragma once
 
-#include <pathforge/geometry/vec2.hpp>
-
 #include <cstddef>
+#include <pathforge/geometry/vec2.hpp>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -21,6 +20,7 @@ inline constexpr double kDefaultMinSegmentLength = 1e-9;
 
 enum class PathIssue {
   None,
+  InvalidTolerance,   ///< minSegmentLength is NaN, infinite or negative.
   TooFewPoints,       ///< Open: < 2 points. Closed: < 3 points.
   NonFinitePoint,     ///< NaN or infinity in a coordinate.
   DegenerateSegment,  ///< Two consecutive points (incl. closing pair) closer than the tolerance.

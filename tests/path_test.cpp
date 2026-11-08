@@ -1,9 +1,8 @@
-#include <pathforge/geometry/path.hpp>
-
 #include <gtest/gtest.h>
 
 #include <cmath>
 #include <limits>
+#include <pathforge/geometry/path.hpp>
 
 using namespace pathforge::geometry;
 
@@ -71,6 +70,8 @@ TEST(Path, SegmentToleranceIsRespected) {
   EXPECT_TRUE(validate(pts, Closure::Open, 1e-9).ok());
   EXPECT_EQ(validate(pts, Closure::Open, 1e-3).issue, PathIssue::DegenerateSegment);
   EXPECT_THROW(Path::create(pts, Closure::Open, -1.0), GeometryError);
+  EXPECT_EQ(validate(pts, Closure::Open, std::numeric_limits<double>::quiet_NaN()).issue,
+            PathIssue::InvalidTolerance);
 }
 
 TEST(Path, CurvatureSignAndStraightLine) {

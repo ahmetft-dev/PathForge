@@ -1,10 +1,10 @@
-#include "MainWindow.h"
-
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QPalette>
 #include <QStyleFactory>
 #include <QTimer>
+
+#include "MainWindow.h"
 
 namespace {
 void applyDarkTheme(QApplication& app) {
@@ -35,7 +35,8 @@ int main(int argc, char** argv) {
 
   QCommandLineParser parser;
   parser.addHelpOption();
-  QCommandLineOption grab("screenshot", "Render the main window to a PNG file and exit (smoke test).", "file");
+  QCommandLineOption grab("screenshot", "Render the main window to a PNG file and exit (smoke test).",
+                          "file");
   parser.addOption(grab);
   parser.process(app);
 

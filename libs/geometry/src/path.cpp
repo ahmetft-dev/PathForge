@@ -1,16 +1,20 @@
-#include <pathforge/geometry/path.hpp>
-
 #include <algorithm>
 #include <cmath>
 #include <numeric>
+#include <pathforge/geometry/path.hpp>
 
 namespace pathforge::geometry {
 
 std::string PathValidation::message() const {
   switch (issue) {
-    case PathIssue::None: return "ok";
-    case PathIssue::TooFewPoints: return "too few points for this path type";
-    case PathIssue::NonFinitePoint: return "non-finite coordinate at point " + std::to_string(index);
+    case PathIssue::None:
+      return "ok";
+    case PathIssue::InvalidTolerance:
+      return "minSegmentLength must be finite and >= 0";
+    case PathIssue::TooFewPoints:
+      return "too few points for this path type";
+    case PathIssue::NonFinitePoint:
+      return "non-finite coordinate at point " + std::to_string(index);
     case PathIssue::DegenerateSegment:
       return "zero-length (duplicate) segment starting at point " + std::to_string(index);
   }
@@ -18,6 +22,9 @@ std::string PathValidation::message() const {
 }
 
 PathValidation validate(const std::vector<Vec2>& points, Closure closure, double minSegmentLength) {
+  if (!std::isfinite(minSegmentLength) || minSegmentLength < 0.0) {
+    return {PathIssue::InvalidTolerance, 0};
+  }
   const std::size_t minPoints = closure == Closure::Closed ? 3 : 2;
   if (points.size() < minPoints) return {PathIssue::TooFewPoints, points.size()};
 
@@ -34,9 +41,6 @@ PathValidation validate(const std::vector<Vec2>& points, Closure closure, double
 }
 
 Path Path::create(std::vector<Vec2> points, Closure closure, double minSegmentLength) {
-  if (!std::isfinite(minSegmentLength) || minSegmentLength < 0.0) {
-    throw GeometryError("minSegmentLength must be finite and >= 0");
-  }
   const PathValidation v = validate(points, closure, minSegmentLength);
   if (!v.ok()) throw GeometryError(v.message());
   return Path(std::move(points), closure);
