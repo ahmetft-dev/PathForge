@@ -312,3 +312,67 @@ TEST(CubicSpline, ConditioningIsIndependentOfTheSpacingRatio) {
     }
   }
 }
+
+// ---- Arc-length consistency (Phase 1D review) -------------------------------------------------------------
+//
+// The editor measures arc length along the DENSE polyline of the spline and resamples along that same
+// polyline, so widths, insertion parameters and the output spacing are internally consistent whatever the
+// dense error is. What remains is the difference between the dense polyline and the true curve length. It was
+// measured against a 10-point Gauss-Legendre rule (32 panels per segment, effectively exact) on an ellipse, a
+// hairpin and an S-curve: the relative error is always NEGATIVE (chords are shorter than arcs) and behaves as
+// c / per^2 with c = 0.003 .. 0.005 (e.g. ellipse 24 points: -1.79e-4 at 4 samples per segment, -4.48e-5 at
+// 8, -1.12e-5 at 16, -7.0e-7 at 64). The editor uses >= 8 samples per segment and about 4 per output spacing,
+// so the length error is below 1e-4 relative. No arc-length integration was added; this test pins the
+// measurement.
+namespace {
+double referenceLength(const CubicSpline& s) {
+  static const double x[5] = {0.1488743389816312, 0.4333953941292472, 0.6794095682990244, 0.8650633666889845,
+                              0.9739065285171717};
+  static const double w[5] = {0.2955242247147529, 0.2692667193099963, 0.2190863625159820, 0.1494513491505806,
+                              0.0666713443086881};
+  double total = 0.0;
+  const int panels = 32;
+  for (std::size_t g = 0; g < s.segmentCount(); ++g) {
+    for (int p = 0; p < panels; ++p) {
+      const double a = static_cast<double>(p) / panels, b = static_cast<double>(p + 1) / panels;
+      const double mid = 0.5 * (a + b), half = 0.5 * (b - a);
+      double sum = 0.0;
+      for (int k = 0; k < 5; ++k) {
+        for (int sign = -1; sign <= 1; sign += 2) {
+          const auto sm = s.evaluate(g, mid + sign * half * x[k]);
+          sum += w[k] * std::hypot(sm.d1.x, sm.d1.y);
+        }
+      }
+      total += sum * half * (s.knot(g + 1) - s.knot(g));
+    }
+  }
+  return total;
+}
+}  // namespace
+
+TEST(CubicSplineArcLength, DensePolylineErrorIsSecondOrderAndNeverOverestimates) {
+  std::vector<Vec2> ellipse;
+  for (int i = 0; i < 24; ++i) {
+    const double t = 2.0 * std::numbers::pi * i / 24.0;
+    ellipse.push_back({150.0 * std::cos(t), 80.0 * std::sin(t)});
+  }
+  const std::vector<Vec2> hairpin{{0, 0}, {100, 0}, {110, 4}, {112, 10}, {110, 16}, {100, 20}, {0, 20}};
+  struct Case {
+    const std::vector<Vec2>* pts;
+    Closure closure;
+  };
+  for (const Case& c : {Case{&ellipse, Closure::Closed}, Case{&hairpin, Closure::Open}}) {
+    const double exact = referenceLength(CubicSpline::create(*c.pts, c.closure, 0.5));
+    double previous = 0.0;
+    for (std::size_t per : {4u, 8u, 16u, 64u}) {
+      const double err = (cubicSpline(*c.pts, c.closure, {per, 0.5}).length() - exact) / exact;
+      EXPECT_LT(err, 0.0) << per;  // chords never exceed the arc
+      EXPECT_GT(err, -6e-3 / static_cast<double>(per * per)) << per;
+      if (previous != 0.0) {
+        const double ratio = previous / err;  // per grew by 2 (or 4): error shrinks by 4 (or 16)
+        EXPECT_GT(ratio, 3.5) << per;
+      }
+      previous = err;
+    }
+  }
+}
