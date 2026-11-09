@@ -34,6 +34,7 @@ else()
 endif()
 
 add_subdirectory(libs/geometry)
+add_subdirectory(libs/editor)
 add_subdirectory(libs/io)
 
 if(PATHFORGE_BUILD_BENCHMARKS)
