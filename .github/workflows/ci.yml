@@ -30,7 +30,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - { os: ubuntu-latest, qt: "6.8.*" }
+          # Qt < 6.9.1 links the removed AGL framework on current macOS SDKs (QTBUG-137687).
+          - { os: macos-latest, qt: "6.9.3" }
+          - { os: windows-latest, qt: "6.8.*" }
     steps:
       - uses: actions/checkout@v4
       - name: Qt system libraries (Linux)
@@ -38,7 +42,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libxkbcommon-dev libegl1
       - uses: jurplel/install-qt-action@v4
         with:
-          version: "6.8.*"
+          version: ${{ matrix.qt }}
           cache: true
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DPATHFORGE_BUILD_STUDIO=ON
