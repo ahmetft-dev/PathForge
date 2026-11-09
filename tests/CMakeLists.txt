@@ -23,6 +23,7 @@ add_executable(pathforge_geometry_tests
   shapes_test.cpp
   predicates_test.cpp
   width_test.cpp
+  validation_test.cpp
 )
 target_link_libraries(pathforge_geometry_tests PRIVATE
   pathforge::geometry pathforge_warnings GTest::gtest_main)
