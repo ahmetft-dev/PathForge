@@ -3,15 +3,15 @@
 #include <QMainWindow>
 #include <QMap>
 #include <QString>
-#include <optional>
-#include <pathforge/geometry/track_data.hpp>
-#include <pathforge/geometry/validation.hpp>
-#include <vector>
 
+class EditorSession;
+class QAction;
+class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
 class QFormLayout;
 class QLabel;
+class QLineEdit;
 class QListWidget;
 class QSpinBox;
 class TrackViewport;
@@ -21,31 +21,42 @@ class MainWindow : public QMainWindow {
  public:
   MainWindow();
 
-  // File operations without dialogs (also used by tests). Both return an empty string on success and an error
-  // message otherwise. A failed open leaves the current track, view and diagnostics untouched.
+  // File operations without dialogs (used by the dialog slots and by tests). Both return an empty string on
+  // success and an error message otherwise. A failed open leaves the current document untouched.
   QString openTrackFile(const QString& path);
   QString saveTrackFile(const QString& path, bool overwrite);
-  const pathforge::geometry::TrackData& currentTrack() const { return current_; }
-  const pathforge::geometry::ValidationReport& currentReport() const { return report_; }
+
+  EditorSession* session() const { return session_; }
+  TrackViewport* viewport() const { return viewport_; }
+  QAction* addPointsAction() const { return addPointsAction_; }
 
  private slots:
-  void generateTrack();
+  void generatePreset();
   void presetChanged();
+  void newTrack();
   void openTrack();
   void saveTrack();
   void saveTrackAs();
+  void deleteSelected();
   void issueSelected(int row);
+
+  void onGeometryChanged();
+  void onValidationChanged();
+  void onDocumentReplaced();
 
  private:
   QWidget* buildSidebar();
   QWidget* buildDiagnostics();
   void setDiagnostic(const QString& key, const QString& value);
-  // Validates and shows `data`. On failure (data cannot form a track) nothing changes and *error is set.
-  bool display(const pathforge::geometry::TrackData& data, const QString& file,
-               std::optional<double> referenceLength, QString* error);
+  void refreshViewport();
+  void syncDocumentWidgets();
+  void applyDocumentSettingsFromWidgets();
   void updateTitle();
 
+  EditorSession* session_ = nullptr;
   TrackViewport* viewport_ = nullptr;
+
+  // Presets
   QComboBox* preset_ = nullptr;
   QDoubleSpinBox* radius_ = nullptr;
   QDoubleSpinBox* length_ = nullptr;
@@ -54,10 +65,20 @@ class MainWindow : public QMainWindow {
   QDoubleSpinBox* trackWidth_ = nullptr;
   QFormLayout* form_ = nullptr;
   QSpinBox* points_ = nullptr;
+
+  // Document settings
+  QLineEdit* nameEdit_ = nullptr;
+  QCheckBox* closedCheck_ = nullptr;
+  QComboBox* interpolation_ = nullptr;
+  QDoubleSpinBox* spacing_ = nullptr;
+  QDoubleSpinBox* defaultLeft_ = nullptr;
+  QDoubleSpinBox* defaultRight_ = nullptr;
+
+  QAction* addPointsAction_ = nullptr;
+  QAction* closedAction_ = nullptr;
+  QAction* deleteAction_ = nullptr;
+
   QLabel* cursorLabel_ = nullptr;
   QMap<QString, QLabel*> diag_;
   QListWidget* issueList_ = nullptr;
-  pathforge::geometry::TrackData current_;
-  pathforge::geometry::ValidationReport report_;
-  QString filePath_;
 };
