@@ -1,4 +1,11 @@
-# Track file format — schema version 1
+# Track file format
+
+Two schema versions exist. **Version 2** stores the *editable source* of a track (control points and settings) and is what
+Studio saves. **Version 1** stores *sampled geometry* (what the CLI exports) and is still read everywhere. Both use the
+same header fields; unsupported versions are rejected with an upgrade hint. The sections below describe version 1 first,
+then version 2.
+
+## Schema version 1 (sampled track)
 
 JSON, UTF-8, produced and read by `libs/io` (`pathforge::io`, no Qt). Doubles are written in the shortest
 form that parses back to the identical value, so a save/load round trip is **bit-exact**. Output is
@@ -58,3 +65,51 @@ interrupted write never leaves a truncated target. With `OverwritePolicy::Fail` 
 untouched and an error is returned. Data that cannot be represented (non-finite numbers, width arrays whose length
 differs from the centerline) is refused rather than written lossily; geometrically invalid but representable tracks
 **are** saved.
+
+## Schema version 2 (editable document)
+
+Stores what the user authored, never derived samples or boundaries; those are regenerated on load, deterministically.
+
+```json
+{
+  "schemaVersion": 2,
+  "name": "Editable circuit",
+  "units": "SI",
+  "coordinateSystem": "xy-right-handed",
+  "closed": true,
+  "geometry": { "interpolation": "catmull-rom", "alpha": 0.5, "resampleSpacing": 2.0 },
+  "controlPoints": [
+    { "x": 100.0, "y": 0.0, "leftWidth": 5.0, "rightWidth": 5.0 },
+    { "x": 70.710678, "y": 70.710678, "leftWidth": 6.5, "rightWidth": 4.0 }
+  ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| header (`schemaVersion`, `name`, `units`, `coordinateSystem`, `closed`) | as in version 1 |
+| `geometry.interpolation` | `"catmull-rom"` (centripetal family, C1) or `"polyline"` (straight segments, exact) |
+| `geometry.alpha` | Catmull–Rom knot exponent in [0, 1] (0.5 = centripetal); stored for both kinds |
+| `geometry.resampleSpacing` | equal arc-length spacing [m] of the derived samples; `0` = no resampling |
+| `controlPoints[]` | control points in order: position and the left/right half-widths **at that point** [m]; widths are interpolated linearly in arc length between points (periodically for closed tracks) |
+
+Rules: doubles round-trip bit-exactly; positions must be finite with |x|, |y| ≤ 1e7 m, widths finite in [0, 1e4] m;
+coordinates and widths outside those limits are rejected with the offending point named. Geometrically unusable documents
+(too few points, duplicates, zero widths, self-intersections) **load fine** so that they can be repaired and saved. Control
+point ids are session identities and are not stored. Unknown fields are ignored and reported as warnings; saving drops them.
+Save → load → save is byte-identical.
+
+### Reading and migration
+
+`loadTrackDocumentFile()` (and Studio, and `pathforge-cli track …`) accepts both versions:
+
+* **v2** → the document exactly as saved.
+* **v1** → imported as a **polyline** document with resampling **off**, one control point per stored sample, widths from the
+  stored per-sample widths. The derived geometry then equals the stored samples **bit-for-bit**; no spline is fitted, because
+  re-interpreting samples as Catmull–Rom control points would change the geometry. Fitting a smooth spline to a sampled track is
+  a deliberate conversion that does not exist yet. A v1 track that cannot be represented as a document (e.g. a negative width)
+  still loads as sampled data (CLI validation) but is refused by the editor with an explanation.
+* Studio does not remember the path of an imported v1 file, so *Save* cannot silently overwrite it with a v2 document; *Save As*
+  writes schema v2. `parseTrackJson()`/`loadTrackFile()` (the sampled-track API) stay v1-only and point v2 files to the document API.
+
+Fixtures: `tests/data/editable_*_v2.json`.

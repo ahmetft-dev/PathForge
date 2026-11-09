@@ -9,13 +9,15 @@ Rather than becoming a racing game, PathForge is intended to be a workspace for 
 > [!IMPORTANT]
 > **Project status: pre-alpha.** Implemented so far: a Qt-free geometry library (paths, Catmull–Rom splines with an
 > analytic-curvature variant, arc-length resampling, tangents/normals/curvature, constant and variable track widths,
-> boundaries, **global track validation with clearance metrics**, circle / oval / S-curve presets), a Qt-free I/O
-> library (**versioned JSON track files, atomic saves**), a CLI (`circle|oval|scurve`, `track validate|inspect`,
-> JSON export), a Qt 6 Studio (viewport, presets, **open/save, validation diagnostics, issue overlays**) and
-> automated tests. Everything else described below is a development goal, not an implemented capability. There is
-> no release and no vehicle, lap-time or optimisation code. See [docs/geometry.md](docs/geometry.md),
-> [docs/validation.md](docs/validation.md), [docs/track-format.md](docs/track-format.md) and
-> [docs/curvature-study.md](docs/curvature-study.md) for methods, tolerances and limitations.
+> boundaries, global track validation with clearance metrics, circle / oval / S-curve presets), a Qt-free **editable
+> track document** with derived geometry, a Qt-free I/O library (versioned JSON, **editable schema v2**, atomic saves),
+> a CLI (`circle|oval|scurve`, `track validate|inspect`, JSON export), and a Qt 6 Studio that is now an **interactive 2D
+> track editor** (create/select/move/insert/delete control points, per-point widths, undo/redo, background validation,
+> open/save) with automated tests. Everything else described below is a development goal, not an implemented capability.
+> There is no release and no vehicle, lap-time or optimisation code. See [docs/editor.md](docs/editor.md),
+> [docs/geometry.md](docs/geometry.md), [docs/validation.md](docs/validation.md),
+> [docs/track-format.md](docs/track-format.md) and [docs/curvature-study.md](docs/curvature-study.md) for methods,
+> tolerances and limitations.
 
 ## Why PathForge?
 
@@ -138,6 +140,7 @@ A numerical solver will be selected when its requirements are clear; one will no
 - [x] **Phase 0 — Foundation:** CMake project, Qt shell, test harness, CI configuration, coding conventions (CI results unverified until first run on GitHub).
 - [x] **Phase 1A — Advanced track geometry:** splines, arc-length resampling, tangents/normals/curvature, boundaries, circle/oval/S-curve presets (all six GitHub Actions jobs passed on `84f9a09`).
 - [x] **Phase 1B — Track validation & persistence:** global validation, clearance metrics, variable widths, JSON schema v1, file I/O, CLI and Studio integration, curvature study (all six GitHub Actions jobs passed on `b676669`: [run 42678312235](https://github.com/ahmetft-dev/PathForge/actions/runs/42678312235)). **Not yet:** interactive track editor (Phase 1C), area-overlap detection, C2 splines.
+- [ ] **Phase 1C — Interactive track editor** *(implemented and tested locally on macOS and with GCC; GitHub Actions verification pending)*: editable document model, control-point editing, undo/redo, width editing, background validation with revision-tagged results, schema v2 persistence with legacy v1 import. **Not yet:** C2 centerline (Phase 2 prerequisite), area-overlap detection, multi-point selection, snapping.
 - [ ] **Phase 2 — First lap simulation (`v0.1` goal):** Point-mass model, speed profile, braking constraints, estimated lap time, headless execution.
 - [ ] **Phase 3 — Racing-line optimization:** Shortest path, minimum curvature, physical/geometric comparison.
 - [ ] **Phase 4 — Experiments and telemetry:** Parameter sweeps, plots, export, regression and performance benchmarks.
@@ -161,7 +164,8 @@ ctest --preset default
 ./build/release/apps/pathforge-cli/pathforge-cli track validate oval.json
 ```
 
-PathForge Studio is built automatically when Qt 6 is found. See [docs/building.md](docs/building.md) for options,
+PathForge Studio is built automatically when Qt 6 is found (`./build/release/apps/pathforge-studio/pathforge-studio.app/Contents/MacOS/pathforge-studio` on macOS).
+Mouse and keyboard controls are in [docs/editor.md](docs/editor.md). See [docs/building.md](docs/building.md) for options,
 platform notes and verification status, and [docs/architecture.md](docs/architecture.md) for the design.
 
 ## Validation and benchmarking

@@ -13,6 +13,9 @@ pathforge-cli                   ─┘
   widths, boundaries, local diagnostics) and the circle / rounded-rectangle (oval) / S-curve generators. See
   [geometry.md](geometry.md). Namespace `pathforge::geometry`, public headers under
   `libs/geometry/include/pathforge/geometry/`.
+- **`libs/editor`** – the Qt-free **editable** layer: `TrackDocument` (control points with stable ids, widths, settings,
+  revision counter) and `generateGeometry()` (control points → interpolation → resampling → widths → `Track`) plus the
+  curve-to-control-segment mapping used for point insertion. See [editor.md](editor.md).
 - **`libs/io`** – schema-v1 JSON parsing/serialisation and atomic file save/load (`pathforge::io`), Qt-free. It is
   the only module that depends on nlohmann/json (private to its sources). See [track-format.md](track-format.md).
 - **`apps/pathforge-cli`** – headless front-end; proves the engine is usable without Qt.
@@ -34,3 +37,11 @@ pathforge-cli                   ─┘
   invariant-holding `Track`; `validateTrackData` reports geometric validity. Bad-but-representable data can be
   loaded and inspected.
 - Only modules with real content exist; others from the roadmap are added when needed.
+- **Editable source vs derived geometry:** the `TrackDocument` is the only authoritative state of the editor; derived geometry and
+  validation are recomputed from it and never edited. The Studio's `EditorSession` owns document, undo stack, selection and
+  derived data; `TrackViewport`/`MainWindow` only render and forward input.
+- **Undo/redo in Qt, document operations not:** `QUndoCommand`s are thin wrappers over Qt-free `TrackDocument` calls, so editing
+  semantics are tested without Qt and the history layer is replaceable.
+- **Background validation by immutable snapshots:** the worker receives a copy of the derived data tagged with a geometry
+  generation; results are accepted only for the current generation; the queue is bounded; shutdown waits for the running job.
+- **Level of detail is a drawing concern only:** decimation never touches the data used for validation, overlays or hit-testing.

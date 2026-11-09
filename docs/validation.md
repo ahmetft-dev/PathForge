@@ -79,21 +79,13 @@ for well-behaved tracks where bounding boxes reject most pairs; tracks with very
 (dense spirals, extremely long thin features) were not measured and may be slower. Other machines and compilers were
 not measured.
 
-## Implications for live editing (Phase 1C planning)
+## Live editing (Phase 1C)
 
-The public validation APIs (`validateTrackData`, `validateTrack`, `ValidationOptions`, `ValidationReport`) are stable
-and are meant to be reused by an interactive editor unchanged. What the measurements above imply:
-
-* Validation is a **full recomputation** (no incremental state) and costs ~3 ns·N² on the measured machine:
-  about 3–4 ms at 1,000 points, 46 ms at 4,000, 0.3 s at 10,000. At 4,000 points a revalidation per mouse-move
-  event would cap the editor near 20 updates/s and at 10,000 points near 3/s. These are validation costs only.
-* **Not measured:** the cost of regenerating the centerline (spline densification, resampling, width
-  evaluation, boundary construction) after a control-point edit, the Studio redraw cost, and any machine other than
-  the one listed. An editor must measure the whole edit-to-screen path before choosing a strategy.
-* Practical consequences: edit **control points** (tens of points) and keep the dense sampling modest; validate
-  after the edit is committed (mouse release), or debounce/ run validation off the GUI thread for large tracks, and
-  keep showing the last result marked stale meanwhile. The geometry core is Qt-free and holds no global state,
-  so a background validation of an immutable copy of `TrackData` is safe.
-* If larger tracks must be validated interactively, the sweeps are the place to optimise (per-segment
-  bounding-box grid or sweep-and-prune restricted to segments near the edited region); this was deliberately not
-  done because it is not needed at the measured sizes.
+The validation API is unchanged; the editor uses it as described in [editor.md](editor.md#live-validation). Measured facts
+(Release, Apple M4 Pro): regenerating the derived geometry after an edit costs 0.1 ms (100 samples) to 1.4 ms (10,000 samples)
+and validation costs 0.18 ms, 4.1 ms, 45 ms and 291 ms for 100, 1,000, 4,000 and 10,000 samples, so validation dominates and is
+therefore (a) skipped during drags, (b) synchronous only up to 1,500 samples (≈ 9 ms, extrapolated from the quadratic fit, not
+separately measured) and (c) run on a worker thread for larger tracks, on an immutable copy, with results tagged by geometry
+generation and obsolete ones dropped. No spatial index was added: at the measured sizes validation is never on the interactive
+path. Tracks much larger than the benchmarked ones, or with many overlapping segment bounding boxes, may need the bounding-box
+grid mentioned earlier.

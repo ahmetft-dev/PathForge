@@ -51,6 +51,17 @@ Exit codes: `0` success / valid, `1` invalid or not fully checked (`track valida
 not be read, parsed or written. `--output` refuses to overwrite unless `--force` is given. `track inspect` exits 0
 whenever the file could be read (it reports the validation status instead).
 
+## Studio tests
+
+With Qt's Test module available, `ctest` also runs `studio.widgets` (29 tests driving the real window with synthetic mouse and
+keyboard events) and `studio.async_validation` (14 tests of the background validation pipeline) on Qt's offscreen platform
+(`QT_QPA_PLATFORM=offscreen` is set by CTest). Run them natively by starting the executables without that variable:
+
+```bash
+./build/release/apps/pathforge-studio/pathforge_studio_tests
+./build/release/apps/pathforge-studio/pathforge_studio_async_tests
+```
+
 ## Benchmarks
 
 ```bash
@@ -58,4 +69,6 @@ cmake -S . -B build/bench -DCMAKE_BUILD_TYPE=Release -DPATHFORGE_BUILD_BENCHMARK
 cmake --build build/bench
 ./build/bench/benchmarks/validation_bench 7
 ./build/bench/benchmarks/curvature_study
+./build/bench/benchmarks/editor_bench
+QT_QPA_PLATFORM=offscreen ./build/bench/apps/pathforge-studio/studio_bench 120   # drag latency
 ```
