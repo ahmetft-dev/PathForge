@@ -32,6 +32,14 @@ if(PATHFORGE_BUILD_TESTS)
     add_test(NAME studio.widgets COMMAND pathforge_studio_tests)
     set_tests_properties(studio.widgets PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+    # Phase 1D acceptance scenarios A-E (automated harness; offscreen under CTest, native Cocoa when run with
+    # QT_QPA_PLATFORM=cocoa).
+    add_executable(pathforge_studio_acceptance_tests ${PROJECT_SOURCE_DIR}/tests/studio_acceptance_test.cpp)
+    target_link_libraries(pathforge_studio_acceptance_tests PRIVATE pathforge_studio_lib Qt6::Test pathforge_warnings)
+    target_compile_definitions(pathforge_studio_acceptance_tests PRIVATE PATHFORGE_TEST_DATA_DIR="${PROJECT_SOURCE_DIR}/tests/data")
+    add_test(NAME studio.acceptance COMMAND pathforge_studio_acceptance_tests)
+    set_tests_properties(studio.acceptance PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
     add_executable(pathforge_studio_async_tests ${PROJECT_SOURCE_DIR}/tests/studio_async_test.cpp)
     target_link_libraries(pathforge_studio_async_tests PRIVATE pathforge_studio_lib Qt6::Test pathforge_warnings)
     add_test(NAME studio.async_validation COMMAND pathforge_studio_async_tests)
