@@ -74,7 +74,9 @@ TEST(Spline, CircleConvergesWithControlDensity) {
     o.samplesPerSegment = 64;
     const Path p = catmullRomSpline(circleControl(r, uniformAngles(m)), Closure::Closed, o);
     const double e = maxRadialError(p, r);
-    if (prev > 0.0) EXPECT_GT(prev / e, 7.0) << "m=" << m;
+    if (prev > 0.0) {
+      EXPECT_GT(prev / e, 7.0) << "m=" << m;
+    }
     prev = e;
     // Length is underestimated (polyline of an inscribed-like curve) and converges too.
     EXPECT_LT(p.length(), 2.0 * kPi * r * (1.0 + 1e-6));

@@ -121,7 +121,9 @@ TEST(Resample, LengthConvergesQuadraticallyWithResolution) {
     // output samples interpolate between (chords), which perturbs e by ~1e-8 absolute, i.e. up to
     // ~1e-4 relative at n = 128 (observed 7.7e-5). Tolerance 2e-4.
     EXPECT_NEAR(e / (x * x / 6.0), 1.0 - x * x / 20.0, 2e-4) << "n=" << n;
-    if (prev > 0.0) EXPECT_NEAR(prev / e, 4.0, 0.1) << "n=" << n;
+    if (prev > 0.0) {
+      EXPECT_NEAR(prev / e, 4.0, 0.1) << "n=" << n;
+    }
     prev = e;
   }
 }
