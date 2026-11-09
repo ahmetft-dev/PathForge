@@ -34,31 +34,49 @@ TrackViewport::TrackViewport(QWidget* parent) : QGraphicsView(parent) {
   setBackgroundBrush(QColor(0x14, 0x16, 0x1a));
 }
 
-void TrackViewport::setPath(const pathforge::geometry::Path& path) {
-  scene_.clear();
-  centerline_ = nullptr;
-
-  const auto& pts = path.points();
+namespace {
+QPainterPath toPainterPath(const std::vector<pathforge::geometry::Vec2>& pts, bool closed) {
   QPainterPath pp;
   pp.moveTo(pts.front().x, -pts.front().y);
   for (std::size_t i = 1; i < pts.size(); ++i) pp.lineTo(pts[i].x, -pts[i].y);
-  if (path.isClosed()) pp.closeSubpath();
+  if (closed) pp.closeSubpath();
+  return pp;
+}
 
-  QPen pen(QColor(0x4f, 0xc3, 0xf7), 2.0);
+QPen cosmeticPen(const QColor& c, double width) {
+  QPen pen(c, width);
   pen.setCosmetic(true);  // constant on-screen width regardless of zoom
   pen.setJoinStyle(Qt::RoundJoin);
-  centerline_ = scene_.addPath(pp, pen);
+  return pen;
+}
+}  // namespace
 
-  // Start marker: first point.
-  QPen markPen(QColor(0xff, 0xb7, 0x4d), 1.0);
-  markPen.setCosmetic(true);
+void TrackViewport::setTrack(const pathforge::geometry::Track& track) {
+  scene_.clear();
+  extent_ = nullptr;
+
+  const bool closed = track.centerline().isClosed();
+  const auto& pts = track.centerline().points();
+
+  // Layer order: boundaries below the centerline. Restrained, colour-blind-distinguishable hues
+  // (left = green, right = orange, centerline = blue).
+  auto* left =
+      scene_.addPath(toPainterPath(track.leftBoundary(), closed), cosmeticPen(QColor(0x66, 0xbb, 0x6a), 1.4));
+  auto* right = scene_.addPath(toPainterPath(track.rightBoundary(), closed),
+                               cosmeticPen(QColor(0xff, 0x8a, 0x50), 1.4));
+  scene_.addPath(toPainterPath(pts, closed), cosmeticPen(QColor(0x4f, 0xc3, 0xf7), 1.8));
+  extent_ = left;
+
+  // Start marker (first centerline point): constant on-screen size.
   const QPointF s(pts.front().x, -pts.front().y);
-  auto* marker = scene_.addEllipse(-3, -3, 6, 6, markPen, QBrush(QColor(0xff, 0xb7, 0x4d)));
-  marker->setFlag(QGraphicsItem::ItemIgnoresTransformations);  // constant on-screen size
+  auto* marker = scene_.addEllipse(-3, -3, 6, 6, cosmeticPen(QColor(0xee, 0xee, 0xee), 1.0),
+                                   QBrush(QColor(0xee, 0xee, 0xee)));
+  marker->setFlag(QGraphicsItem::ItemIgnoresTransformations);
   marker->setPos(s);
 
-  // Generous scene rect so panning is not clamped to the track bounds.
-  const QRectF r = centerline_->boundingRect();
+  // Fit region: union of all layers. Generous scene rect so panning is not clamped.
+  QRectF r = left->boundingRect().united(right->boundingRect());
+  extentRect_ = r;
   const double m = std::max(r.width(), r.height()) * 2.0;
   scene_.setSceneRect(r.adjusted(-m, -m, m, m));
   userMoved_ = false;
@@ -66,8 +84,8 @@ void TrackViewport::setPath(const pathforge::geometry::Path& path) {
 }
 
 void TrackViewport::fitToView() {
-  if (!centerline_) return;
-  const QRectF r = centerline_->boundingRect();
+  if (!extent_) return;
+  const QRectF r = extentRect_;
   const double margin = std::max(r.width(), r.height()) * 0.08;
   fitInView(r.adjusted(-margin, -margin, margin, margin), Qt::KeepAspectRatio);
   userMoved_ = false;
