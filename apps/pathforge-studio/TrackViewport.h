@@ -25,6 +25,7 @@ class TrackViewport : public QGraphicsView {
   static constexpr double kHitRadiusPx = 8.0;
   static constexpr double kDragThresholdPx = 3.0;
   static constexpr double kInsertRadiusPx = 12.0;
+  static constexpr double kHandleSpacingPx = 6.0;  // dense handles are thinned to this on-screen spacing
 
   explicit TrackViewport(QWidget* parent = nullptr);
 
@@ -51,6 +52,9 @@ class TrackViewport : public QGraphicsView {
   std::optional<pathforge::editor::PointId> pointAt(QPointF viewportPos) const;
 
  signals:
+  // The zoom changed: the level of detail of the drawn polylines depends on it, so the owner should call
+  // setContent() again with the same data.
+  void scaleChanged();
   void cursorMoved(double xMeters, double yMeters);
   void pointPressed(pathforge::editor::PointId id);
   void pointDragged(double xMeters, double yMeters);

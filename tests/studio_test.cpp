@@ -6,6 +6,7 @@
 #include <QDir>
 #include <QDoubleSpinBox>
 #include <QGraphicsLineItem>
+#include <QGraphicsPathItem>
 #include <QGraphicsScene>
 #include <QMouseEvent>
 #include <QPushButton>
@@ -654,6 +655,110 @@ class StudioTest : public QObject {
     QVERIFY(zeroWidthIssue);
     left->setValue(5.0);  // repaired
     QCOMPARE(s->report().status(), pg::ValidationStatus::Valid);
+  }
+
+  // ---- Level of detail
+  // ----------------------------------------------------------------------------------------
+
+  static QGraphicsPathItem* centerlineItem(TrackViewport* v) {
+    for (QGraphicsItem* item : v->scene()->items()) {
+      if (auto* p = dynamic_cast<QGraphicsPathItem*>(item); p && p->pen().color() == QColor(0x4f, 0xc3, 0xf7))
+        return p;
+    }
+    return nullptr;
+  }
+
+  static pfe::TrackDocument denseEllipse(int n) {
+    pfe::TrackDocument d;
+    d.setClosure(pfe::Closure::Closed);
+    pfe::GeometrySettings g;
+    g.interpolation = pfe::Interpolation::Polyline;
+    g.resampleSpacing = 0.0;
+    d.setSettings(g);
+    for (int i = 0; i < n; ++i) {
+      const double t = 2.0 * M_PI * i / n;
+      d.appendPoint({2000.0 * std::cos(t), 1200.0 * std::sin(t)}, 5.0, 5.0);
+    }
+    return d;
+  }
+
+  void drawnPolylinesAreDecimatedToOnePixelWithoutLosingShape() {
+    MainWindow w;
+    w.resize(1200, 800);
+    w.show();
+    EditorSession* s = w.session();
+    s->setAsyncThreshold(100000);
+    s->replaceDocument(denseEllipse(6000), QString());
+    TrackViewport* v = w.viewport();
+    v->fitToView();
+    QApplication::processEvents();
+    const QGraphicsPathItem* item = centerlineItem(v);
+    QVERIFY(item);
+    const QPainterPath path = item->path();
+    const int drawn = path.elementCount();
+    QVERIFY2(drawn < 6000 / 3,
+             qPrintable(QString("drawn vertices: %1").arg(drawn)));  // far fewer than the samples
+    QVERIFY(drawn > 50);
+    const auto& samples = s->derived().data.centerline;
+    // First and last samples are always drawn.
+    QCOMPARE(path.elementAt(0).x, samples.front().x);
+    QCOMPARE(-path.elementAt(0).y, samples.front().y);
+    // (QPainterPath::closeSubpath() appends a final line back to the start, so the last SAMPLE is the element
+    // before.)
+    QCOMPARE(path.elementAt(drawn - 2).x, samples.back().x);
+    QCOMPARE(-path.elementAt(drawn - 2).y, samples.back().y);
+    QCOMPARE(path.elementAt(drawn - 1).x, samples.front().x);
+    // Every original vertex lies within one screen pixel of a drawn vertex (so the picture is the same to a
+    // pixel).
+    const double onePixel = 1.0 / v->pixelsPerMeter();
+    double worst = 0.0;
+    for (const pg::Vec2& p : samples) {
+      double best = 1e300;
+      for (int i = 0; i < drawn; ++i) {
+        best = std::min(best, std::hypot(p.x - path.elementAt(i).x, p.y + path.elementAt(i).y));
+      }
+      worst = std::max(worst, best);
+    }
+    QVERIFY2(worst <= onePixel * 1.0001, qPrintable(QString("worst %1 px").arg(worst / onePixel)));
+
+    // Zooming in restores detail (the drawing is rebuilt for the new scale), and fitting again decimates
+    // again.
+    v->zoomBy(40.0);
+    QApplication::processEvents();
+    QVERIFY(centerlineItem(v)->path().elementCount() > drawn * 2);
+    v->fitToView();
+    QCOMPARE(centerlineItem(v)->path().elementCount(), drawn);
+    // The data itself is never decimated: validation and overlays use all 6000 samples.
+    QCOMPARE(s->derived().data.centerline.size(), std::size_t{6000});
+  }
+
+  void denseControlHandlesAreThinnedButEveryPointStaysSelectable() {
+    MainWindow w;
+    w.resize(1200, 800);
+    w.show();
+    EditorSession* s = w.session();
+    s->setAsyncThreshold(100000);
+    s->replaceDocument(denseEllipse(4000), QString());
+    TrackViewport* v = w.viewport();
+    v->fitToView();
+    QApplication::processEvents();
+    int handles = 0;
+    for (QGraphicsItem* item : v->scene()->items()) {
+      if (item->flags().testFlag(QGraphicsItem::ItemIgnoresTransformations) && item->zValue() >= 10)
+        ++handles;
+    }
+    QVERIFY2(handles < 4000 / 3, qPrintable(QString("handles drawn: %1").arg(handles)));
+    QVERIFY(handles >= 10);
+    // Selection still works for any point, and a selected point is always drawn.
+    const pfe::ControlPoint p = s->document().points()[1234];
+    s->select(p.id);
+    QApplication::processEvents();
+    bool selectedDrawn = false;
+    for (QGraphicsItem* item : v->scene()->items()) {
+      if (item->zValue() == 11 && item->pos() == QPointF(p.position.x, -p.position.y)) selectedDrawn = true;
+    }
+    QVERIFY(selectedDrawn);
+    QCOMPARE(v->pointAt(v->worldToViewport(p.position)), p.id);
   }
 
   void zoomFitAndResizeStillWork() {

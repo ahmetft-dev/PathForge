@@ -40,3 +40,9 @@ if(PATHFORGE_BUILD_TESTS)
     message(STATUS "Qt6 Test not found: skipping Studio widget tests")
   endif()
 endif()
+
+# Interaction-latency benchmark (not run by CTest).
+if(PATHFORGE_BUILD_BENCHMARKS)
+  add_executable(studio_bench bench/studio_bench.cpp)
+  target_link_libraries(studio_bench PRIVATE pathforge_studio_lib pathforge_warnings)
+endif()

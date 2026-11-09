@@ -154,6 +154,10 @@ MainWindow::MainWindow() {
       "to pan");
 
   // ---- Wiring: viewport requests -> session edits; session changes -> UI refresh.
+  connect(viewport_, &TrackViewport::scaleChanged, this, [this] {
+    lastView_ = ViewKey{~0ull, 0, 0};  // force: the drawing's level of detail depends on the zoom
+    refreshViewport();
+  });
   connect(viewport_, &TrackViewport::cursorMoved, this, [this](double x, double y) {
     cursorLabel_->setText(QString("x %1 m   y %2 m").arg(x, 0, 'f', 2).arg(y, 0, 'f', 2));
   });

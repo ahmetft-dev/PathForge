@@ -25,11 +25,23 @@ double gridStep(double pixelsPerMeter, double minPixels) {
   return 10.0 * mag;
 }
 
-QPainterPath toPainterPath(const std::vector<pg::Vec2>& pts, bool closed) {
+// Builds the drawn polyline. Level of detail: a vertex closer than `minStep` [m] to the last drawn one is
+// skipped (the last vertex is always kept). With minStep = 1 screen pixel the picture is the same to within
+// one pixel, but a 10 km track sampled every metre no longer makes Qt stroke ~100 vertices per pixel.
+// Geometry, validation and issue overlays always use the full-resolution data; only this drawing is
+// decimated.
+QPainterPath toPainterPath(const std::vector<pg::Vec2>& pts, bool closed, double minStep) {
   QPainterPath pp;
   if (pts.empty()) return pp;
   pp.moveTo(pts.front().x, -pts.front().y);
-  for (std::size_t i = 1; i < pts.size(); ++i) pp.lineTo(pts[i].x, -pts[i].y);
+  pg::Vec2 last = pts.front();
+  const double min2 = minStep * minStep;
+  for (std::size_t i = 1; i < pts.size(); ++i) {
+    const pg::Vec2 d = pts[i] - last;
+    if (i + 1 < pts.size() && d.x * d.x + d.y * d.y < min2) continue;
+    pp.lineTo(pts[i].x, -pts[i].y);
+    last = pts[i];
+  }
   if (closed && pts.size() > 2) pp.closeSubpath();
   return pp;
 }
@@ -72,20 +84,23 @@ void TrackViewport::setContent(const pfe::DerivedGeometry& derived,
   points_ = points;
   const bool closed = derived.data.closure == pfe::Closure::Closed;
   QRectF extent;
+  const double minStep = 1.0 / std::max(pixelsPerMeter(), kMinScale);  // one screen pixel in meters
 
   // Layer order: boundaries below the centerline, overlays above, handles on top. Restrained, colour-blind
   // distinguishable hues (left = green, right = orange, centerline = blue).
   if (derived.track) {
     const pg::Track& t = *derived.track;
-    scene_.addPath(toPainterPath(t.leftBoundary(), closed), cosmeticPen(QColor(0x66, 0xbb, 0x6a), 1.4));
-    scene_.addPath(toPainterPath(t.rightBoundary(), closed), cosmeticPen(QColor(0xff, 0x8a, 0x50), 1.4));
-    scene_.addPath(toPainterPath(t.centerline().points(), closed),
+    scene_.addPath(toPainterPath(t.leftBoundary(), closed, minStep),
+                   cosmeticPen(QColor(0x66, 0xbb, 0x6a), 1.4));
+    scene_.addPath(toPainterPath(t.rightBoundary(), closed, minStep),
+                   cosmeticPen(QColor(0xff, 0x8a, 0x50), 1.4));
+    scene_.addPath(toPainterPath(t.centerline().points(), closed, minStep),
                    cosmeticPen(QColor(0x4f, 0xc3, 0xf7), 1.8));
     growTo(extent, t.leftBoundary());
     growTo(extent, t.rightBoundary());
   } else if (points.size() >= 2) {
     // Incomplete or degenerate document: show the raw control polygon so the user sees what exists.
-    scene_.addPath(toPainterPath(derived.data.centerline, closed),
+    scene_.addPath(toPainterPath(derived.data.centerline, closed, minStep),
                    cosmeticPen(QColor(0x90, 0x96, 0xa0), 1.2, Qt::DashLine));
   }
 
@@ -120,13 +135,23 @@ void TrackViewport::setContent(const pfe::DerivedGeometry& derived,
     }
   }
 
-  // Control point handles (constant on-screen size). The first point of the track is drawn as a ring.
+  // Control point handles (constant on-screen size). The first point of the track is drawn as a ring. Level
+  // of detail: a handle within kHandleSpacingPx of the previously drawn one is not drawn (the selected point
+  // and the first point always are); every point stays selectable through pointAt(), which does not depend on
+  // what is drawn.
   std::vector<pg::Vec2> positions;
   positions.reserve(points.size());
+  const double handleStep2 = std::pow(kHandleSpacingPx * minStep, 2);
+  std::optional<pg::Vec2> lastHandle;
   for (std::size_t i = 0; i < points.size(); ++i) {
     const pfe::ControlPoint& p = points[i];
     positions.push_back(p.position);
     const bool sel = selected && *selected == p.id;
+    if (!sel && i != 0 && lastHandle) {
+      const pg::Vec2 d = p.position - *lastHandle;
+      if (d.x * d.x + d.y * d.y < handleStep2) continue;
+    }
+    lastHandle = p.position;
     const double r = sel ? 6.0 : 4.0;
     const QColor fill = sel ? QColor(0xff, 0xca, 0x28) : QColor(0x1b, 0x1e, 0x23);
     const QColor edge = sel ? QColor(0xff, 0xe0, 0x82) : QColor(0xe8, 0xea, 0xee);
@@ -205,6 +230,7 @@ void TrackViewport::fitToView() {
   const double margin = size * 0.08;
   fitInView(r.adjusted(-margin, -margin, margin, margin), Qt::KeepAspectRatio);
   userMoved_ = false;
+  emit scaleChanged();
 }
 
 void TrackViewport::zoomBy(double factor) {
@@ -212,6 +238,7 @@ void TrackViewport::zoomBy(double factor) {
   if (s < kMinScale || s > kMaxScale) return;
   scale(factor, factor);
   userMoved_ = true;
+  emit scaleChanged();
 }
 
 void TrackViewport::wheelEvent(QWheelEvent* event) {
