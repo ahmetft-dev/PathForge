@@ -126,6 +126,33 @@ class SetWidthsCommand : public QUndoCommand {
   double l0_, r0_, l1_, r1_;
 };
 
+// Sets the widths of many points in ONE document mutation (one regeneration, one validation), as one undo
+// step.
+class SetAllWidthsCommand : public QUndoCommand {
+ public:
+  struct Old {
+    pfe::PointId id;
+    double left, right;
+  };
+  SetAllWidthsCommand(EditorSession* s, std::vector<Old> old, double left, double right)
+      : QUndoCommand("Set all widths"), s_(s), old_(std::move(old)), l_(left), r_(right) {}
+  void redo() override {
+    UndoAccess::mutate(s_, [&](pfe::TrackDocument& d) {
+      for (const Old& o : old_) d.setPointWidths(o.id, l_, r_);
+    });
+  }
+  void undo() override {
+    UndoAccess::mutate(s_, [&](pfe::TrackDocument& d) {
+      for (const Old& o : old_) d.setPointWidths(o.id, o.left, o.right);
+    });
+  }
+
+ private:
+  EditorSession* s_;
+  std::vector<Old> old_;
+  double l_, r_;
+};
+
 class SetClosureCommand : public QUndoCommand {
  public:
   SetClosureCommand(EditorSession* s, pfe::Closure from, pfe::Closure to)
@@ -202,8 +229,7 @@ bool dryRun(const pfe::TrackDocument& doc, Fn&& fn, QString* why) {
 
 EditorSession::EditorSession(QObject* parent) : QObject(parent) {
   connect(&undo_, &QUndoStack::cleanChanged, this, [this](bool clean) { emit modifiedChanged(!clean); });
-  regenerate();
-  validateNow();
+  regenerate(true);
 }
 
 void EditorSession::setDefaultWidths(double left, double right) {
@@ -223,19 +249,27 @@ bool EditorSession::mutate(Fn&& fn) {
     emit editRejected(QString::fromUtf8(e.what()));
     return false;
   }
-  regenerate();
-  if (!drag_) validateNow();
+  regenerate(/*validate=*/!drag_);
   return true;
 }
 
-void EditorSession::regenerate() {
+// Regenerates derived geometry. With `validate`, the report is recomputed BEFORE the change is announced, so
+// listeners see geometry and its matching report together (one UI refresh per edit). During drags validation
+// is skipped and the report becomes stale.
+void EditorSession::regenerate(bool validate) {
   derived_ = pfe::generateGeometry(doc_);
+  ++generation_;
   if (selection_ && !doc_.find(*selection_)) {
     selection_.reset();
     emit selectionChanged();
   }
+  if (validate) {
+    report_ = pg::validateTrackData(derived_.data);
+    reportRevision_ = doc_.revision();
+    hasReport_ = true;
+  }
   emit geometryChanged();
-  if (!isReportCurrent()) emit validationChanged();  // the shown report is now stale
+  if (validate || !isReportCurrent()) emit validationChanged();
 }
 
 void EditorSession::validateNow() {
@@ -253,8 +287,7 @@ void EditorSession::replaceDocument(pfe::TrackDocument document, const QString& 
   selection_.reset();
   hasReport_ = false;
   emit selectionChanged();
-  regenerate();
-  validateNow();
+  regenerate(true);
   undo_.setClean();
   emit documentReplaced();
 }
@@ -273,13 +306,8 @@ std::optional<pfe::PointId> EditorSession::appendPoint(pg::Vec2 p) {
 std::optional<pfe::PointId> EditorSession::insertNear(pg::Vec2 p, double maxDistance) {
   const auto target = pfe::findInsertion(doc_, derived_, p);
   if (!target || target->distance > maxDistance) return std::nullopt;
-  // New points take the widths of the neighbouring control point, so the boundary does not jump.
-  double left = defaultLeft_, right = defaultRight_;
-  if (!doc_.empty()) {
-    const auto& n = doc_.points()[target->index > 0 ? target->index - 1 : 0];
-    left = n.leftWidth;
-    right = n.rightWidth;
-  }
+  // New points take the widths the track has at that position, so the boundary does not jump.
+  const double left = target->leftWidth, right = target->rightWidth;
   QString why;
   if (!dryRun(
           doc_, [&](pfe::TrackDocument& d) { d.insertPoint(target->index, target->position, left, right); },
@@ -324,6 +352,22 @@ bool EditorSession::setPointWidths(pfe::PointId id, double left, double right) {
   }
   if (cp->leftWidth == left && cp->rightWidth == right) return true;
   undo_.push(new SetWidthsCommand(this, id, cp->leftWidth, cp->rightWidth, left, right));
+  return true;
+}
+
+bool EditorSession::setAllWidths(double left, double right) {
+  QString why;
+  if (!dryRun(doc_, [&](pfe::TrackDocument& d) { d.checkWidth(left), d.checkWidth(right); }, &why)) {
+    emit editRejected(why);
+    return false;
+  }
+  bool any = false;
+  for (const pfe::ControlPoint& p : doc_.points()) any = any || p.leftWidth != left || p.rightWidth != right;
+  if (!any) return true;
+  std::vector<SetAllWidthsCommand::Old> old;
+  old.reserve(doc_.size());
+  for (const pfe::ControlPoint& p : doc_.points()) old.push_back({p.id, p.leftWidth, p.rightWidth});
+  undo_.push(new SetAllWidthsCommand(this, std::move(old), left, right));
   return true;
 }
 

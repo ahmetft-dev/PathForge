@@ -4,6 +4,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QDir>
+#include <QDoubleSpinBox>
 #include <QGraphicsLineItem>
 #include <QGraphicsScene>
 #include <QMouseEvent>
@@ -524,6 +525,135 @@ class StudioTest : public QObject {
     QCOMPARE(s->document().size(), n);
     QTest::keySequence(&w, QKeySequence::Redo);
     QCOMPARE(s->document().size(), n + 1);
+  }
+
+  // ---- Width editing
+  // -------------------------------------------------------------------------------------------
+
+  static QDoubleSpinBox* spin(MainWindow& w, const char* name) { return w.findChild<QDoubleSpinBox*>(name); }
+
+  void pointPanelShowsAndEditsTheSelectedPoint() {
+    MainWindow w;
+    w.show();
+    EditorSession* s = w.session();
+    QVERIFY(!spin(w, "pointLeft")->isEnabled());  // nothing selected
+    const pfe::ControlPoint p = s->document().points()[12];
+    s->select(p.id);
+    QVERIFY(spin(w, "pointLeft")->isEnabled());
+    QCOMPARE(spin(w, "pointX")->value(), std::round(p.position.x * 1000) / 1000);
+    QCOMPARE(spin(w, "pointLeft")->value(), 5.0);
+    QCOMPARE(spin(w, "pointRight")->value(), 5.0);
+
+    // Position typed into the panel moves the point as ONE undoable step.
+    const int n = s->undoStack()->count();
+    spin(w, "pointX")->setValue(12.5);
+    spin(w, "pointY")->setValue(-40.25);
+    QCOMPARE(s->document().find(p.id)->position, (pg::Vec2{12.5, -40.25}));
+    QCOMPARE(s->undoStack()->count(), n + 2);  // one per committed field
+    s->undoStack()->undo();
+    s->undoStack()->undo();
+    QCOMPARE(s->document().find(p.id)->position, p.position);
+  }
+
+  void leftAndRightWidthsAreIndependentAndUpdateBoundaries() {
+    MainWindow w;
+    w.show();
+    EditorSession* s = w.session();
+    const std::size_t i = 10;
+    s->select(s->document().points()[i].id);
+    spin(w, "pointLeft")->setValue(8.0);
+    const pfe::ControlPoint p = s->document().points()[i];
+    QCOMPARE(p.leftWidth, 8.0);
+    QCOMPARE(p.rightWidth, 5.0);  // untouched
+    // Preset circle R = 100, CCW: left boundary is inside (R - w), right boundary outside (R + w).
+    const auto& track = *s->derived().track;
+    QVERIFY(std::abs(pg::norm(track.leftBoundary()[i]) - (100.0 - 8.0)) < 1e-9);
+    QVERIFY(std::abs(pg::norm(track.rightBoundary()[i]) - (100.0 + 5.0)) < 1e-9);
+    spin(w, "pointRight")->setValue(2.5);
+    QVERIFY(std::abs(pg::norm(s->derived().track->rightBoundary()[i]) - (100.0 + 2.5)) < 1e-9);
+    QVERIFY(std::abs(pg::norm(s->derived().track->leftBoundary()[i]) - (100.0 - 8.0)) < 1e-9);
+    // Neighbouring samples keep their original width: the profile is variable, not constant.
+    QVERIFY(!s->derived().track->hasConstantWidths());
+    QCOMPARE(s->derived().data.leftWidths[i - 1], 5.0);
+    QCOMPARE(s->derived().data.leftWidths[i + 1], 5.0);
+    QVERIFY(s->isReportCurrent());
+    QCOMPARE(s->report().status(), pg::ValidationStatus::Valid);
+  }
+
+  void applyAllMakesAConstantWidthTrackInOneUndoStep() {
+    MainWindow w;
+    w.show();
+    EditorSession* s = w.session();
+    s->select(s->document().points()[3].id);
+    spin(w, "pointLeft")->setValue(9.0);
+    QVERIFY(!s->derived().track->hasConstantWidths());
+    const int n = s->undoStack()->count();
+    spin(w, "pointRight")->setValue(4.0);
+    w.findChild<QPushButton*>("applyAllWidths")->click();
+    for (const auto& p : s->document().points()) {
+      QCOMPARE(p.leftWidth, 9.0);
+      QCOMPARE(p.rightWidth, 4.0);
+    }
+    QVERIFY(s->derived().track->hasConstantWidths());
+    s->undoStack()->undo();  // the whole "apply to all" is one step
+    QCOMPARE(s->document().points()[0].leftWidth, 5.0);
+    QCOMPARE(s->document().points()[3].leftWidth, 9.0);
+    QCOMPARE(s->undoStack()->count(), n + 1);  // the right-width edit merged into the left-width step
+  }
+
+  void widthsStayAlignedWhenPointsAreInsertedAndDeleted() {
+    MainWindow w;
+    w.show();
+    action(w, "New Track")->trigger();
+    EditorSession* s = w.session();
+    pfe::GeometrySettings poly;
+    poly.interpolation = pfe::Interpolation::Polyline;
+    poly.resampleSpacing = 5.0;
+    s->setSettings(poly);
+    s->setDefaultWidths(4.0, 2.0);
+    const pfe::PointId a = *s->appendPoint({0, 0});
+    s->setDefaultWidths(8.0, 6.0);
+    const pfe::PointId b = *s->appendPoint({100, 0});
+    s->setDefaultWidths(5.0, 5.0);
+    const pfe::PointId c = *s->appendPoint({200, 0});
+    const auto mid = s->insertNear({50, 1}, 5.0);  // halfway between a and b
+    QVERIFY(mid.has_value());
+    QCOMPARE(s->document().points()[1].id, *mid);
+    QVERIFY(std::abs(s->document().find(*mid)->leftWidth - 6.0) < 1e-9);   // (4 + 8) / 2
+    QVERIFY(std::abs(s->document().find(*mid)->rightWidth - 4.0) < 1e-9);  // (2 + 6) / 2
+    // Every other point keeps its own widths by identity, not by index.
+    QCOMPARE(s->document().find(a)->leftWidth, 4.0);
+    QCOMPARE(s->document().find(b)->leftWidth, 8.0);
+    QCOMPARE(s->document().find(c)->leftWidth, 5.0);
+    s->removePoint(b);
+    QCOMPARE(s->document().find(a)->leftWidth, 4.0);
+    QCOMPARE(s->document().find(c)->leftWidth, 5.0);
+    QCOMPARE(s->document().size(), std::size_t{3});
+    // Derived widths interpolate between the surviving control points in arc length.
+    const auto& g = s->derived();
+    QCOMPARE(g.data.leftWidths.size(), g.data.centerline.size());
+    QVERIFY(std::abs(g.data.leftWidths.front() - 4.0) < 1e-9);
+    QVERIFY(std::abs(g.data.leftWidths.back() - 5.0) < 1e-9);
+  }
+
+  void invalidWidthsCannotBeEnteredAndZeroIsReportedAsAnError() {
+    MainWindow w;
+    w.show();
+    EditorSession* s = w.session();
+    s->select(s->document().points()[5].id);
+    QDoubleSpinBox* left = spin(w, "pointLeft");
+    QCOMPARE(left->minimum(), 0.0);  // the editor never produces negative widths
+    left->setValue(-3.0);            // clamped by the control to its minimum
+    QVERIFY(s->document().points()[5].leftWidth >= 0.0);
+    left->setValue(0.0);  // zero is representable (repairable) but invalid
+    QVERIFY(s->isReportCurrent());
+    QCOMPARE(s->report().status(), pg::ValidationStatus::Invalid);
+    bool zeroWidthIssue = false;
+    for (const auto& i : s->report().issues)
+      zeroWidthIssue = zeroWidthIssue || i.type == pg::TrackIssue::InvalidWidth;
+    QVERIFY(zeroWidthIssue);
+    left->setValue(5.0);  // repaired
+    QCOMPARE(s->report().status(), pg::ValidationStatus::Valid);
   }
 
   void zoomFitAndResizeStillWork() {

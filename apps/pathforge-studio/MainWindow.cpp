@@ -274,6 +274,56 @@ void MainWindow::presetChanged() {
 QWidget* MainWindow::buildDiagnostics() {
   auto* w = new QWidget;
   auto* outer = new QVBoxLayout(w);
+  // ---- Selected point: position and widths in meters. Edits are committed when the field loses focus or
+  // Enter is pressed (keyboard tracking is off), so typing a value is one undo step, not one per keystroke.
+  pointBox_ = new QGroupBox("Selected point");
+  auto* pf = new QFormLayout(pointBox_);
+  pointTitle_ = new QLabel("No point selected");
+  pf->addRow(pointTitle_);
+  auto coordSpin = [](const char* name, double lo, double hi, int decimals, const char* suffix) {
+    auto* sp = new QDoubleSpinBox;
+    sp->setObjectName(name);
+    sp->setRange(lo, hi);
+    sp->setDecimals(decimals);
+    sp->setSuffix(suffix);
+    sp->setKeyboardTracking(false);
+    return sp;
+  };
+  pointX_ = coordSpin("pointX", -pfe::kMaxCoordinate, pfe::kMaxCoordinate, 3, " m");
+  pointY_ = coordSpin("pointY", -pfe::kMaxCoordinate, pfe::kMaxCoordinate, 3, " m");
+  pointLeft_ = coordSpin("pointLeft", 0.0, pfe::kMaxWidth, 2, " m");
+  pointRight_ = coordSpin("pointRight", 0.0, pfe::kMaxWidth, 2, " m");
+  pointLeft_->setToolTip(
+      "Left half-width at this control point; interpolated linearly in arc length between points");
+  pointRight_->setToolTip(
+      "Right half-width at this control point; interpolated linearly in arc length between points");
+  pf->addRow("X", pointX_);
+  pf->addRow("Y", pointY_);
+  pf->addRow("Left width", pointLeft_);
+  pf->addRow("Right width", pointRight_);
+  applyAllWidths_ = new QPushButton("Set all points to these widths");
+  applyAllWidths_->setObjectName("applyAllWidths");
+  pf->addRow(applyAllWidths_);
+  auto* hint = new QLabel(
+      "Widths are defined at control points and interpolated linearly along the track's arc length.");
+  hint->setWordWrap(true);
+  pf->addRow(hint);
+  auto commitPosition = [this] {
+    if (const auto id = session_->selection())
+      session_->setPointPosition(*id, {pointX_->value(), pointY_->value()});
+  };
+  auto commitWidths = [this] {
+    if (const auto id = session_->selection())
+      session_->setPointWidths(*id, pointLeft_->value(), pointRight_->value());
+  };
+  connect(pointX_, &QDoubleSpinBox::valueChanged, this, commitPosition);
+  connect(pointY_, &QDoubleSpinBox::valueChanged, this, commitPosition);
+  connect(pointLeft_, &QDoubleSpinBox::valueChanged, this, commitWidths);
+  connect(pointRight_, &QDoubleSpinBox::valueChanged, this, commitWidths);
+  connect(applyAllWidths_, &QPushButton::clicked, this,
+          [this] { session_->setAllWidths(pointLeft_->value(), pointRight_->value()); });
+  outer->addWidget(pointBox_);
+
   auto* form = new QFormLayout;
   form->setRowWrapPolicy(
       QFormLayout::WrapLongRows);  // long values drop below their label instead of clipping
@@ -303,6 +353,12 @@ void MainWindow::setDiagnostic(const QString& key, const QString& value) { diag_
 // UI
 
 void MainWindow::refreshViewport() {
+  // The viewport content is a pure function of (derived geometry, selection, whether a current report exists
+  // and which one). Skip the (comparatively expensive) scene rebuild when nothing it shows has changed.
+  const ViewKey key{session_->generation(), session_->selection().value_or(0),
+                    session_->isReportCurrent() ? session_->document().revision() : 0};
+  if (key == lastView_) return;
+  lastView_ = key;
   viewport_->setContent(session_->derived(), session_->document().points(), session_->selection(),
                         session_->isReportCurrent() ? &session_->report() : nullptr);
 }
@@ -316,6 +372,26 @@ void MainWindow::syncDocumentWidgets() {
   interpolation_->setCurrentIndex(d.settings().interpolation == pfe::Interpolation::CatmullRom ? 0 : 1);
   spacing_->setValue(d.settings().resampleSpacing);
   deleteAction_->setEnabled(session_->selection().has_value());
+  syncPointPanel();
+}
+
+void MainWindow::syncPointPanel() {
+  const auto id = session_->selection();
+  const pfe::ControlPoint* p = id ? session_->document().find(*id) : nullptr;
+  pointBox_->setEnabled(p != nullptr);
+  const QSignalBlocker b1(pointX_), b2(pointY_), b3(pointLeft_), b4(pointRight_);
+  if (!p) {
+    pointTitle_->setText("No point selected");
+    return;
+  }
+  pointTitle_->setText(QString("Point %1 of %2")
+                           .arg(*session_->document().indexOf(p->id) + 1)
+                           .arg(session_->document().size()));
+  // Do not overwrite a field the user is typing in.
+  if (!pointX_->hasFocus()) pointX_->setValue(p->position.x);
+  if (!pointY_->hasFocus()) pointY_->setValue(p->position.y);
+  if (!pointLeft_->hasFocus()) pointLeft_->setValue(p->leftWidth);
+  if (!pointRight_->hasFocus()) pointRight_->setValue(p->rightWidth);
 }
 
 void MainWindow::applyDocumentSettingsFromWidgets() {

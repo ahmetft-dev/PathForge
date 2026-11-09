@@ -4,7 +4,9 @@
 #include <QMap>
 #include <QMessageBox>
 #include <QString>
+#include <cstdint>
 #include <functional>
+#include <tuple>
 
 class EditorSession;
 class QAction;
@@ -12,6 +14,8 @@ class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
 class QFormLayout;
+class QGroupBox;
+class QPushButton;
 class QLabel;
 class QLineEdit;
 class QListWidget;
@@ -60,9 +64,12 @@ class MainWindow : public QMainWindow {
   void setDiagnostic(const QString& key, const QString& value);
   void refreshViewport();
   void syncDocumentWidgets();
+  void syncPointPanel();
   void applyDocumentSettingsFromWidgets();
   void updateTitle();
 
+  using ViewKey = std::tuple<std::uint64_t, std::uint64_t, std::uint64_t>;
+  ViewKey lastView_{~0ull, 0, 0};
   EditorSession* session_ = nullptr;
   TrackViewport* viewport_ = nullptr;
 
@@ -83,6 +90,15 @@ class MainWindow : public QMainWindow {
   QDoubleSpinBox* spacing_ = nullptr;
   QDoubleSpinBox* defaultLeft_ = nullptr;
   QDoubleSpinBox* defaultRight_ = nullptr;
+
+  // Selected-point properties
+  QGroupBox* pointBox_ = nullptr;
+  QLabel* pointTitle_ = nullptr;
+  QDoubleSpinBox* pointX_ = nullptr;
+  QDoubleSpinBox* pointY_ = nullptr;
+  QDoubleSpinBox* pointLeft_ = nullptr;
+  QDoubleSpinBox* pointRight_ = nullptr;
+  QPushButton* applyAllWidths_ = nullptr;
 
   QAction* addPointsAction_ = nullptr;
   QAction* closedAction_ = nullptr;

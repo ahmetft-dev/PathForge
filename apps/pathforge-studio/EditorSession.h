@@ -35,6 +35,8 @@ class EditorSession : public QObject {
   // Validation result and the revision it belongs to. isReportCurrent() is false while a newer revision has
   // not been validated yet (e.g. during a drag); callers must then treat the report as stale.
   const pathforge::geometry::ValidationReport& report() const { return report_; }
+  // Incremented every time derived geometry is regenerated; lets views skip redundant redraws.
+  std::uint64_t generation() const { return generation_; }
   bool isReportCurrent() const { return reportRevision_ == doc_.revision() && hasReport_; }
 
   double defaultLeftWidth() const { return defaultLeft_; }
@@ -53,6 +55,8 @@ class EditorSession : public QObject {
   bool removePoint(pathforge::editor::PointId id);
   bool setPointPosition(pathforge::editor::PointId id, pathforge::geometry::Vec2 position);
   bool setPointWidths(pathforge::editor::PointId id, double left, double right);
+  // Sets every control point to the same widths (constant-width track) as ONE undoable step.
+  bool setAllWidths(double left, double right);
   bool setClosure(pathforge::editor::Closure closure);
   bool setSettings(const pathforge::editor::GeometrySettings& settings);
   bool setName(const QString& name);
@@ -87,7 +91,7 @@ class EditorSession : public QObject {
   // EditError.
   template <class Fn>
   bool mutate(Fn&& fn);
-  void regenerate();
+  void regenerate(bool validate);
   void validateNow();
 
   pathforge::editor::TrackDocument doc_;
@@ -99,6 +103,7 @@ class EditorSession : public QObject {
   pathforge::geometry::ValidationReport report_;
   std::uint64_t reportRevision_ = 0;
   bool hasReport_ = false;
+  std::uint64_t generation_ = 0;
   double defaultLeft_ = 5.0;
   double defaultRight_ = 5.0;
 };
