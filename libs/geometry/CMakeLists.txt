@@ -1,6 +1,7 @@
 add_library(pathforge_geometry STATIC
   src/path.cpp
   src/circle.cpp
+  src/spline.cpp
   src/frames.cpp
 )
 add_library(pathforge::geometry ALIAS pathforge_geometry)
