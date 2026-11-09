@@ -7,6 +7,7 @@
 #include <pathforge/geometry/circle.hpp>
 #include <pathforge/geometry/frames.hpp>
 #include <pathforge/geometry/shapes.hpp>
+#include <pathforge/geometry/track.hpp>
 
 using namespace pathforge::geometry;
 
@@ -236,4 +237,12 @@ TEST(SCurve, GeometryIsConsistentAcrossResolutions) {
   // (it did when the dense spline polyline was fixed at 1024 vertices). Observed 2048 vs 4096: 1e-3.
   const Path finer = makeSCurve(300.0, 30.0, 4096);
   EXPECT_NEAR(computeStats(fine).maxAbsCurvature / computeStats(finer).maxAbsCurvature, 1.0, 5e-3);
+}
+
+TEST(SCurve, BoundariesHaveOppositeInnerSides) {
+  const Track t = Track::create(makeSCurve(300.0, 30.0, 256), 5.0, 5.0);
+  EXPECT_FALSE(t.diagnostics().anyLocalIssue());
+  // Peak curvature 1.5e-2 => radius 69 m; width 5 m => margin w*kappa ~ 0.07, both sides equal by symmetry.
+  EXPECT_NEAR(t.diagnostics().maxLeftWidthCurvature, t.diagnostics().maxRightWidthCurvature, 5e-3);
+  EXPECT_NEAR(t.diagnostics().maxLeftWidthCurvature, 5.0 * 1.45e-2, 2e-2);
 }
