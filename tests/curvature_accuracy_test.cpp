@@ -162,7 +162,6 @@ TEST(CurvatureAccuracy, MengerCurvatureOfASampledCircleIsExact) {
 // for general paths). Measured max curvature error * K^2 / (A (2 pi / L)^2): ~6 for every K, i.e. O(h^2) with
 // a small constant.
 TEST(CurvatureAccuracy, SCurveC2ErrorMatchesAnalyticSineAndConvergesQuadratically) {
-  const double peak = kSineA * std::pow(2 * kPi / kSineL, 2);  // 1.316e-2
   double prevMax = 0.0, prevRms = 0.0;
   for (int k : {8, 16, 32}) {
     const auto c = sinePoints(k);
@@ -170,8 +169,7 @@ TEST(CurvatureAccuracy, SCurveC2ErrorMatchesAnalyticSineAndConvergesQuadraticall
                                    cubicSpline(c, Closure::Open, {64, 0.5}));
     EXPECT_LT(e.max, 0.1 / (k * k)) << k;    // measured 0.073 / K^2 .. 0.081 / K^2
     EXPECT_LT(e.rms, 0.025 / (k * k)) << k;  // measured 0.021 / K^2 .. 0.017 / K^2
-    EXPECT_GT(e.max, 0.03 * peak / (k * k) *
-                         100);  // ... and a real, non-zero error (> 0.04 / K^2 for A, L used here)
+    EXPECT_GT(e.max, 0.04 / (k * k)) << k;   // and a real, non-zero error (measured 0.073 / K^2 or more)
     if (prevMax > 0.0) {
       EXPECT_GT(prevMax / e.max, 3.3) << k;  // observed 3.6, 4.1
       EXPECT_LT(prevMax / e.max, 4.6) << k;
