@@ -7,6 +7,8 @@
 
 using namespace pathforge::editor;
 using pathforge::geometry::TrackIssue;
+using pathforge::geometry::validateTrackData;
+using pathforge::geometry::ValidationReport;
 using pathforge::geometry::ValidationStatus;
 
 namespace {
@@ -358,4 +360,47 @@ TEST(DerivedGeometryC2, DerivedCurvatureProfileIsSmootherThanCatmullRomOnAnEllip
   const double cr = maxStep(generateGeometry(ellipseDoc(Interpolation::CatmullRom, 0.25, 20)));
   const double c2 = maxStep(generateGeometry(ellipseDoc(Interpolation::CubicC2, 0.25, 20)));
   EXPECT_GT(cr, 3.0 * c2);  // measured with these settings; documents the effect, not a universal ratio
+}
+
+// ---- Spline health (Phase 1D) ----------------------------------------------------------------------------
+
+TEST(SplineHealth, HealthyC2CurveIsCheckedAndReportsNothing) {
+  const DerivedGeometry g = generateGeometry(ellipseDoc(Interpolation::CubicC2, 1.0));
+  ASSERT_EQ(g.status, DerivedStatus::Ok);
+  EXPECT_TRUE(g.splineHealth.checked);
+  EXPECT_EQ(g.splineHealth.degenerateSamples, 0u);
+  EXPECT_EQ(g.splineHealth.nonFiniteSamples, 0u);
+  ValidationReport r = validateTrackData(g.data);
+  const std::size_t errorsBefore = r.errorCount, issuesBefore = r.issues.size();
+  mergeSplineHealth(r, g.splineHealth);
+  EXPECT_EQ(r.errorCount, errorsBefore);
+  EXPECT_EQ(r.issues.size(), issuesBefore);
+}
+
+TEST(SplineHealth, OtherInterpolationsAreNotChecked) {
+  EXPECT_FALSE(generateGeometry(ellipseDoc(Interpolation::CatmullRom, 1.0)).splineHealth.checked);
+  EXPECT_FALSE(generateGeometry(ellipseDoc(Interpolation::Polyline, 1.0)).splineHealth.checked);
+}
+
+TEST(SplineHealth, FindingsBecomeOneErrorPerKindAndInvalidateTheReport) {
+  // A real stationary point cannot be constructed from distinct control points with reasonable knots, so the
+  // merge is exercised with a synthetic health record.
+  SplineHealth h;
+  h.checked = true;
+  h.degenerateSamples = 3;
+  h.firstDegenerate = Vec2{1.0, 2.0};
+  h.firstDegenerateSegment = 4;
+  h.nonFiniteSamples = 1;
+  h.firstNonFinite = Vec2{5.0, 6.0};
+  ValidationReport r = validateTrackData(generateGeometry(ellipseDoc(Interpolation::CubicC2, 1.0)).data);
+  ASSERT_EQ(r.status(), ValidationStatus::Valid);
+  mergeSplineHealth(r, h);
+  EXPECT_EQ(r.status(), ValidationStatus::Invalid);
+  EXPECT_EQ(r.errorCount, 2u);
+  ASSERT_GE(r.issues.size(), 2u);
+  const auto& a = r.issues[r.issues.size() - 2];
+  const auto& b = r.issues.back();
+  EXPECT_EQ(a.type, TrackIssue::InvalidSplineDerivative);
+  EXPECT_EQ(a.segments.at(0).index, 4u);
+  EXPECT_EQ(b.type, TrackIssue::CurvatureEvaluationFailure);
 }

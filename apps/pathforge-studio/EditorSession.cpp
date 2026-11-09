@@ -290,6 +290,7 @@ void EditorSession::regenerate(Mode mode) {
 void EditorSession::validateNow() {
   const auto t0 = std::chrono::steady_clock::now();
   report_ = pg::validateTrackData(derived_.data);
+  pathforge::editor::mergeSplineHealth(report_, derived_.splineHealth);
   lastValidationMs_ =
       std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
   reportGeneration_ = generation_;
@@ -307,6 +308,8 @@ void EditorSession::onRunnerFinished(quint64 generation, double milliseconds) {
     return;
   }
   report_ = runner_.lastReport();
+  pathforge::editor::mergeSplineHealth(report_,
+                                       derived_.splineHealth);  // generation matches: derived_ is current
   lastValidationMs_ = milliseconds;
   reportGeneration_ = generation;
   hasReport_ = true;

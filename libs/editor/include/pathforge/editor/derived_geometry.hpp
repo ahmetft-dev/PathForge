@@ -5,6 +5,7 @@
 #include <pathforge/editor/track_document.hpp>
 #include <pathforge/geometry/track.hpp>
 #include <pathforge/geometry/track_data.hpp>
+#include <pathforge/geometry/validation.hpp>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,20 @@ enum class DerivedStatus {
   Ok,            ///< centerline generated and a Track (with boundaries) built
   TooFewPoints,  ///< open < 2 / closed < 3 control points: nothing to interpolate yet
   Failed,        ///< generation impossible (e.g. coincident consecutive control points, sample limit)
+};
+
+/// Health of the interpolating curve itself (not of the track corridor), measured analytically at the control
+/// points and at three interior fractions of every control segment. Only the C2 spline is checked: its first
+/// and second derivatives are available in closed form. Catmull-Rom and polyline interpolation leave it
+/// empty (`checked` false); the cusp case of Catmull-Rom already fails generation (coincident samples).
+struct SplineHealth {
+  bool checked = false;
+  std::size_t degenerateSamples = 0;    ///< evaluation points with (almost) zero velocity
+  std::size_t nonFiniteSamples = 0;     ///< evaluation points with a non-finite derivative or curvature
+  std::optional<Vec2> firstDegenerate;  ///< location of the first of each kind
+  std::optional<Vec2> firstNonFinite;
+  std::size_t firstDegenerateSegment = 0;  ///< control segment of the first of each kind
+  std::size_t firstNonFiniteSegment = 0;
 };
 
 /// Everything computed FROM a TrackDocument. Never edited directly; regenerate after every document change.
@@ -39,7 +54,14 @@ struct DerivedGeometry {
   std::vector<double> sampleArcLength;
   double parameterLength = 0.0;
   std::size_t denseSamplesPerSegment = 0;  ///< 1 for polyline interpolation
+  SplineHealth splineHealth;
 };
+
+/// Adds the spline-health findings to a validation report as InvalidSplineDerivative and
+/// CurvatureEvaluationFailure errors (one issue per kind, with the number of affected evaluation points). The
+/// two issue types can only come from the curve, so the track-level validation (which sees only samples) does
+/// not produce them itself. Call this on every report obtained for `derived`, synchronous or asynchronous.
+void mergeSplineHealth(geometry::ValidationReport& report, const SplineHealth& health);
 
 /// Hard limits on generated geometry, so that a pathological document (e.g. a 1 mm spacing on a 10 km track)
 /// produces a clear failure instead of exhausting memory or stalling the UI.

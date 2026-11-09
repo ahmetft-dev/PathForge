@@ -305,7 +305,8 @@ int runTrack(int argc, char** argv) {
   std::optional<pathforge::editor::DerivedGeometry> derived;
   if (!loaded.legacyData) derived = pathforge::editor::generateGeometry(*loaded.document);
   const geometry::TrackData& d = loaded.legacyData ? *loaded.legacyData : derived->data;
-  const geometry::ValidationReport v = geometry::validateTrackData(d);
+  geometry::ValidationReport v = geometry::validateTrackData(d);
+  if (derived) pathforge::editor::mergeSplineHealth(v, derived->splineHealth);
 
   if (sub == "inspect") {
     std::printf("PathForge track file: %s\n", argv[3]);

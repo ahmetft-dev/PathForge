@@ -34,7 +34,64 @@ DerivedGeometry fail(const TrackDocument& d, DerivedStatus status, std::string m
   return g;
 }
 
+SplineHealth measureC2Health(const std::vector<Vec2>& control, Closure closure, double alpha) {
+  SplineHealth h;
+  h.checked = true;
+  const geometry::CubicSpline spline = geometry::CubicSpline::create(control, closure, alpha);
+  const double scale = spline.speedScale();
+  for (std::size_t seg = 0; seg < spline.segmentCount(); ++seg) {
+    for (int k = 0; k < 4; ++k) {
+      const geometry::CubicSpline::Sample sm = spline.evaluate(seg, 0.25 * k);
+      const bool finite = std::isfinite(sm.d1.x) && std::isfinite(sm.d1.y) && std::isfinite(sm.d2.x) &&
+                          std::isfinite(sm.d2.y);
+      if (!finite) {
+        if (h.nonFiniteSamples++ == 0) {
+          h.firstNonFinite = sm.position;
+          h.firstNonFiniteSegment = seg;
+        }
+        continue;
+      }
+      if (std::hypot(sm.d1.x, sm.d1.y) < geometry::kMinRelativeSpeed * scale) {
+        if (h.degenerateSamples++ == 0) {
+          h.firstDegenerate = sm.position;
+          h.firstDegenerateSegment = seg;
+        }
+        continue;
+      }
+      if (!std::isfinite(geometry::curvatureFromDerivatives(sm.d1, sm.d2, scale).value)) {
+        if (h.nonFiniteSamples++ == 0) {
+          h.firstNonFinite = sm.position;
+          h.firstNonFiniteSegment = seg;
+        }
+      }
+    }
+  }
+  return h;
+}
+
 }  // namespace
+
+void mergeSplineHealth(geometry::ValidationReport& report, const SplineHealth& h) {
+  using geometry::Severity;
+  using geometry::TrackIssue;
+  const auto add = [&](TrackIssue type, std::size_t count, std::size_t segment, std::optional<Vec2> where,
+                       const std::string& text) {
+    if (count == 0) return;
+    ++report.errorCount;
+    report.issues.push_back({type,
+                             Severity::Error,
+                             {{geometry::PolylineId::Centerline, segment}},
+                             where,
+                             text + " (" + std::to_string(count) +
+                                 " evaluation point(s); first in control segment " + std::to_string(segment) +
+                                 ")"});
+  };
+  add(TrackIssue::InvalidSplineDerivative, h.degenerateSamples, h.firstDegenerateSegment, h.firstDegenerate,
+      "the interpolating spline has (almost) zero velocity (cusp or stationary point), so its tangent and "
+      "curvature are undefined");
+  add(TrackIssue::CurvatureEvaluationFailure, h.nonFiniteSamples, h.firstNonFiniteSegment, h.firstNonFinite,
+      "the analytic curvature of the interpolating spline is not finite");
+}
 
 DerivedGeometry generateGeometry(const TrackDocument& d) {
   const auto& pts = d.points();
@@ -84,6 +141,8 @@ DerivedGeometry generateGeometry(const TrackDocument& d) {
                   ? geometry::cubicSpline(control, d.closure(), {per, s.alpha})
                   : geometry::catmullRomSpline(control, d.closure(), {per, s.alpha});
     }
+    if (s.interpolation == Interpolation::CubicC2)
+      g.splineHealth = measureC2Health(control, d.closure(), s.alpha);
     const double length = dense->length();
     g.controlArcLength.resize(n);
     for (std::size_t i = 0; i < n; ++i) g.controlArcLength[i] = dense->arcLengths()[i * per];
