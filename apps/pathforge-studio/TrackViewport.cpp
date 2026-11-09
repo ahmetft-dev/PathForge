@@ -51,7 +51,8 @@ QPen cosmeticPen(const QColor& c, double width) {
 }
 }  // namespace
 
-void TrackViewport::setTrack(const pathforge::geometry::Track& track) {
+void TrackViewport::setTrack(const pathforge::geometry::Track& track,
+                             const pathforge::geometry::ValidationReport& report) {
   scene_.clear();
   extent_ = nullptr;
 
@@ -67,6 +68,44 @@ void TrackViewport::setTrack(const pathforge::geometry::Track& track) {
   scene_.addPath(toPainterPath(pts, closed), cosmeticPen(QColor(0x4f, 0xc3, 0xf7), 1.8));
   extent_ = left;
 
+  // Validation overlay: affected segments and issue locations.
+  namespace pg = pathforge::geometry;
+  auto polylineOf = [&](pg::PolylineId id) -> const std::vector<pg::Vec2>& {
+    switch (id) {
+      case pg::PolylineId::LeftBoundary:
+        return track.leftBoundary();
+      case pg::PolylineId::RightBoundary:
+        return track.rightBoundary();
+      case pg::PolylineId::Centerline:
+        break;
+    }
+    return track.centerline().points();
+  };
+  for (const pg::ValidationIssue& issue : report.issues) {
+    if (issue.severity == pg::Severity::Info) continue;
+    const QColor color =
+        issue.severity == pg::Severity::Error ? QColor(0xff, 0x52, 0x52) : QColor(0xff, 0xca, 0x28);
+    for (const pg::SegmentRef& ref : issue.segments) {
+      const auto& pl = polylineOf(ref.polyline);
+      const std::size_t j = (ref.index + 1) % pl.size();
+      if (ref.index >= pl.size() || (!closed && ref.index + 1 >= pl.size())) continue;
+      auto* seg =
+          scene_.addLine(pl[ref.index].x, -pl[ref.index].y, pl[j].x, -pl[j].y, cosmeticPen(color, 3.0));
+      seg->setZValue(5);
+    }
+    if (issue.location) {
+      QPainterPath cross;  // small X, constant on-screen size
+      cross.moveTo(-5, -5);
+      cross.lineTo(5, 5);
+      cross.moveTo(-5, 5);
+      cross.lineTo(5, -5);
+      auto* m = scene_.addPath(cross, cosmeticPen(color, 2.0));
+      m->setFlag(QGraphicsItem::ItemIgnoresTransformations);
+      m->setPos(issue.location->x, -issue.location->y);
+      m->setZValue(6);
+    }
+  }
+
   // Start marker (first centerline point): constant on-screen size.
   const QPointF s(pts.front().x, -pts.front().y);
   auto* marker = scene_.addEllipse(-3, -3, 6, 6, cosmeticPen(QColor(0xee, 0xee, 0xee), 1.0),
@@ -81,6 +120,11 @@ void TrackViewport::setTrack(const pathforge::geometry::Track& track) {
   scene_.setSceneRect(r.adjusted(-m, -m, m, m));
   userMoved_ = false;
   fitToView();
+}
+
+void TrackViewport::focusOn(double x, double y) {
+  centerOn(x, -y);
+  userMoved_ = true;
 }
 
 void TrackViewport::fitToView() {
