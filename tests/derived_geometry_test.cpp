@@ -180,6 +180,34 @@ TEST(DerivedGeometry, ImpossibleSampleCountsFailInsteadOfExhaustingMemory) {
   EXPECT_NE(g.message.find("spacing"), std::string::npos);
 }
 
+// The widths reported for an insertion are the derived widths at that curve position, so inserting a point
+// with them does not change the boundaries there. Two points with half-widths (4, 2) and (8, 6) on a straight
+// 100 m segment: halfway the widths are exactly (6, 4) (linear in arc length).
+TEST(DerivedGeometry, InsertionCarriesTheInterpolatedWidths) {
+  TrackDocument d;
+  GeometrySettings s;
+  s.interpolation = Interpolation::Polyline;
+  s.resampleSpacing = 10.0;
+  d.setSettings(s);
+  d.appendPoint({0, 0}, 4, 2);
+  d.appendPoint({100, 0}, 8, 6);
+  const DerivedGeometry g = generateGeometry(d);
+  const auto t = findInsertion(d, g, {50, 7});
+  ASSERT_TRUE(t.has_value());
+  EXPECT_NEAR(t->leftWidth, 6.0, 1e-9);
+  EXPECT_NEAR(t->rightWidth, 4.0, 1e-9);
+  const auto quarter = findInsertion(d, g, {25, 0});
+  EXPECT_NEAR(quarter->leftWidth, 5.0, 1e-9);
+  // Inserting there leaves the width profile (hence the boundaries) unchanged along the whole segment.
+  d.insertPoint(t->index, t->position, t->leftWidth, t->rightWidth);
+  const DerivedGeometry after = generateGeometry(d);
+  ASSERT_EQ(after.data.leftWidths.size(), g.data.leftWidths.size());
+  for (std::size_t k = 0; k < g.data.leftWidths.size(); ++k) {
+    EXPECT_NEAR(after.data.leftWidths[k], g.data.leftWidths[k], 1e-9) << k;
+    EXPECT_NEAR(after.data.rightWidths[k], g.data.rightWidths[k], 1e-9) << k;
+  }
+}
+
 TEST(DerivedGeometry, InsertionMapsCurvePositionToControlSegment) {
   TrackDocument d;
   GeometrySettings s;

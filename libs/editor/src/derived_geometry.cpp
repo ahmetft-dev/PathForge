@@ -134,7 +134,7 @@ std::optional<InsertionTarget> findInsertion(const TrackDocument& d, const Deriv
   const bool closed = g.data.closure == Closure::Closed;
   const std::size_t segs = closed ? m : m - 1;
 
-  double best = std::numeric_limits<double>::infinity(), bestS = 0.0;
+  double best = std::numeric_limits<double>::infinity(), bestS = 0.0, bestLeft = 0.0, bestRight = 0.0;
   Vec2 bestPoint{};
   for (std::size_t k = 0; k < segs; ++k) {
     const Vec2 a = c[k], b = c[(k + 1) % m];
@@ -149,6 +149,9 @@ std::optional<InsertionTarget> findInsertion(const TrackDocument& d, const Deriv
       const double s0 = g.sampleArcLength[k];
       const double s1 = k + 1 < m ? g.sampleArcLength[k + 1] : g.parameterLength;
       bestS = s0 + t * (s1 - s0);
+      const std::size_t k1 = (k + 1) % m;
+      bestLeft = g.data.leftWidths[k] + t * (g.data.leftWidths[k1] - g.data.leftWidths[k]);
+      bestRight = g.data.rightWidths[k] + t * (g.data.rightWidths[k1] - g.data.rightWidths[k]);
     }
   }
   // Control segment j: the last control point at or before bestS.
@@ -156,7 +159,7 @@ std::optional<InsertionTarget> findInsertion(const TrackDocument& d, const Deriv
   std::size_t j = static_cast<std::size_t>(std::upper_bound(ca.begin(), ca.end(), bestS) - ca.begin());
   j = j == 0 ? 0 : j - 1;
   if (!closed && j >= d.size() - 1) j = d.size() - 2;  // the open end point belongs to the last segment
-  return InsertionTarget{j + 1, bestPoint, best};
+  return InsertionTarget{j + 1, bestPoint, best, bestLeft, bestRight};
 }
 
 }  // namespace pathforge::editor

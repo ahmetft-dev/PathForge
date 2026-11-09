@@ -60,6 +60,8 @@ struct InsertionTarget {
   std::size_t index;  ///< insert before this control-point index (== size(): after the last point)
   Vec2 position;      ///< the nearest point ON the derived centerline
   double distance;    ///< distance from the query point to `position` [m]
+  double leftWidth;   ///< half-widths of the derived track at `position` (linear between samples), so that a
+  double rightWidth;  ///< point inserted there with these widths leaves the boundaries unchanged
 };
 
 /// Finds the derived-centerline point nearest to `p` and maps it, through the arc-length parameter, to the
