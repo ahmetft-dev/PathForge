@@ -2,6 +2,7 @@
 
 #include <QAction>
 #include <QCheckBox>
+#include <QCloseEvent>
 #include <QComboBox>
 #include <QDockWidget>
 #include <QDoubleSpinBox>
@@ -63,10 +64,10 @@ MainWindow::MainWindow() {
   connect(open, &QAction::triggered, this, &MainWindow::openTrack);
   auto* save = new QAction("&Save Track", this);
   save->setShortcut(QKeySequence::Save);
-  connect(save, &QAction::triggered, this, &MainWindow::saveTrack);
+  connect(save, &QAction::triggered, this, [this] { saveTrack(); });
   auto* saveAs = new QAction("Save Track &As…", this);
   saveAs->setShortcut(QKeySequence::SaveAs);
-  connect(saveAs, &QAction::triggered, this, &MainWindow::saveTrackAs);
+  connect(saveAs, &QAction::triggered, this, [this] { saveTrackAs(); });
   auto* quit = new QAction("Quit", this);
   quit->setShortcut(QKeySequence::Quit);
   connect(quit, &QAction::triggered, this, &QWidget::close);
@@ -103,7 +104,14 @@ MainWindow::MainWindow() {
   file->addAction(saveAs);
   file->addSeparator();
   file->addAction(quit);
+  undoAction_ = session_->undoStack()->createUndoAction(this, "&Undo");
+  undoAction_->setShortcut(QKeySequence::Undo);
+  redoAction_ = session_->undoStack()->createRedoAction(this, "&Redo");
+  redoAction_->setShortcut(QKeySequence::Redo);
   auto* edit = menuBar()->addMenu("&Edit");
+  edit->addAction(undoAction_);
+  edit->addAction(redoAction_);
+  edit->addSeparator();
   edit->addAction(addPointsAction_);
   edit->addAction(closedAction_);
   edit->addAction(deleteAction_);
@@ -120,6 +128,9 @@ MainWindow::MainWindow() {
   tb->addAction(newAct);
   tb->addAction(open);
   tb->addAction(save);
+  tb->addSeparator();
+  tb->addAction(undoAction_);
+  tb->addAction(redoAction_);
   tb->addSeparator();
   tb->addAction(addPointsAction_);
   tb->addAction(closedAction_);
@@ -165,6 +176,7 @@ MainWindow::MainWindow() {
   });
   connect(session_, &EditorSession::validationChanged, this, &MainWindow::onValidationChanged);
   connect(session_, &EditorSession::documentReplaced, this, &MainWindow::onDocumentReplaced);
+  connect(session_, &EditorSession::modifiedChanged, this, [this](bool m) { setWindowModified(m); });
   connect(session_, &EditorSession::editRejected, this,
           [this](const QString& why) { statusBar()->showMessage("Edit rejected: " + why, 5000); });
 
@@ -380,8 +392,9 @@ void MainWindow::onDocumentReplaced() {
 
 void MainWindow::updateTitle() {
   QString t = "PathForge Studio — " + QString::fromStdString(session_->document().name());
-  if (!session_->filePath().isEmpty()) t += " [" + QFileInfo(session_->filePath()).fileName() + "]";
-  setWindowTitle(t);
+  if (!session_->filePath().isEmpty()) t += " (" + QFileInfo(session_->filePath()).fileName() + ")";
+  setWindowTitle(t + "[*]");  // "[*]" is replaced by Qt with the modified marker while windowModified is set
+  setWindowModified(session_->isModified());
 }
 
 void MainWindow::issueSelected(int row) {
@@ -398,6 +411,7 @@ void MainWindow::deleteSelected() {
 }
 
 void MainWindow::newTrack() {
+  if (!maybeSave()) return;
   pfe::TrackDocument d;
   d.setName("Untitled track");
   session_->replaceDocument(std::move(d), QString());
@@ -406,6 +420,7 @@ void MainWindow::newTrack() {
 }
 
 void MainWindow::generatePreset() {
+  if (!maybeSave()) return;
   try {
     const std::size_t n = static_cast<std::size_t>(points_->value());
     const int preset = preset_->currentIndex();
@@ -461,6 +476,7 @@ QString MainWindow::saveTrackFile(const QString& path, bool overwrite) {
                                  overwrite ? pio::OverwritePolicy::Overwrite : pio::OverwritePolicy::Fail);
   if (!r.ok()) return QString::fromStdString(r.error);
   session_->setFilePath(path);
+  session_->markSaved();
   setDiagnostic("File", path);
   updateTitle();
   statusBar()->showMessage("Saved " + path, 4000);
@@ -476,19 +492,49 @@ void MainWindow::openTrack() {
     QMessageBox::warning(this, "Cannot open track", error + "\n\nThe current track was not changed.");
 }
 
-void MainWindow::saveTrackAs() {
+bool MainWindow::saveTrackAs() {
   const QString path =
       QFileDialog::getSaveFileName(this, "Save Track As", session_->filePath(), "PathForge track (*.json)");
-  if (path.isEmpty()) return;  // the dialog already asked for confirmation when the file exists
+  if (path.isEmpty())
+    return false;  // cancelled; the dialog already asked for confirmation when the file exists
   const QString error = saveTrackFile(path, true);
-  if (!error.isEmpty()) QMessageBox::warning(this, "Cannot save track", error);
+  if (!error.isEmpty()) {
+    QMessageBox::warning(this, "Cannot save track", error);
+    return false;
+  }
+  return true;
 }
 
-void MainWindow::saveTrack() {
-  if (session_->filePath().isEmpty()) {
-    saveTrackAs();
-    return;
-  }
+bool MainWindow::saveTrack() {
+  if (session_->filePath().isEmpty()) return saveTrackAs();
   const QString error = saveTrackFile(session_->filePath(), true);
-  if (!error.isEmpty()) QMessageBox::warning(this, "Cannot save track", error);
+  if (!error.isEmpty()) {
+    QMessageBox::warning(this, "Cannot save track", error);
+    return false;
+  }
+  return true;
+}
+
+bool MainWindow::maybeSave() {
+  if (!session_->isModified()) return true;
+  QMessageBox::StandardButton choice;
+  if (prompt_) {
+    choice = prompt_();
+  } else {
+    choice = QMessageBox::warning(this, "Unsaved changes",
+                                  QString("The track \"%1\" has unsaved changes.")
+                                      .arg(QString::fromStdString(session_->document().name())),
+                                  QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+                                  QMessageBox::Save);
+  }
+  if (choice == QMessageBox::Save) return saveTrack();  // a failed or cancelled save keeps the document open
+  return choice == QMessageBox::Discard;
+}
+
+void MainWindow::closeEvent(QCloseEvent* event) {
+  if (maybeSave()) {
+    event->accept();
+  } else {
+    event->ignore();
+  }
 }

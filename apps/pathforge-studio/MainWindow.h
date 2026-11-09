@@ -2,7 +2,9 @@
 
 #include <QMainWindow>
 #include <QMap>
+#include <QMessageBox>
 #include <QString>
+#include <functional>
 
 class EditorSession;
 class QAction;
@@ -26,17 +28,25 @@ class MainWindow : public QMainWindow {
   QString openTrackFile(const QString& path);
   QString saveTrackFile(const QString& path, bool overwrite);
 
+  // Unsaved-changes workflow. Returns true when it is safe to replace/close the document: it is unmodified,
+  // was saved, or the user chose to discard. The prompt (Save / Discard / Cancel) can be replaced for tests.
+  bool maybeSave();
+  void setUnsavedPrompt(std::function<QMessageBox::StandardButton()> prompt) { prompt_ = std::move(prompt); }
+
   EditorSession* session() const { return session_; }
   TrackViewport* viewport() const { return viewport_; }
   QAction* addPointsAction() const { return addPointsAction_; }
+
+ protected:
+  void closeEvent(QCloseEvent* event) override;
 
  private slots:
   void generatePreset();
   void presetChanged();
   void newTrack();
   void openTrack();
-  void saveTrack();
-  void saveTrackAs();
+  bool saveTrack();
+  bool saveTrackAs();
   void deleteSelected();
   void issueSelected(int row);
 
@@ -77,6 +87,10 @@ class MainWindow : public QMainWindow {
   QAction* addPointsAction_ = nullptr;
   QAction* closedAction_ = nullptr;
   QAction* deleteAction_ = nullptr;
+
+  QAction* undoAction_ = nullptr;
+  QAction* redoAction_ = nullptr;
+  std::function<QMessageBox::StandardButton()> prompt_;
 
   QLabel* cursorLabel_ = nullptr;
   QMap<QString, QLabel*> diag_;

@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QUndoStack>
 #include <cstdint>
 #include <optional>
 #include <pathforge/editor/derived_geometry.hpp>
@@ -24,6 +25,12 @@ class EditorSession : public QObject {
   const pathforge::editor::DerivedGeometry& derived() const { return derived_; }
   std::optional<pathforge::editor::PointId> selection() const { return selection_; }
   const QString& filePath() const { return filePath_; }
+
+  // Editing history. Every edit (including each completed drag, and each width/closure/settings change) is
+  // one command; replacing the document clears the history. isModified() is false right after load/save/new.
+  QUndoStack* undoStack() { return &undo_; }
+  bool isModified() const { return !undo_.isClean(); }
+  void markSaved() { undo_.setClean(); }
 
   // Validation result and the revision it belongs to. isReportCurrent() is false while a newer revision has
   // not been validated yet (e.g. during a drag); callers must then treat the report as stale.
@@ -64,6 +71,7 @@ class EditorSession : public QObject {
   void selectionChanged();
   void validationChanged();  // report() changed or became stale
   void documentReplaced();
+  void modifiedChanged(bool modified);
   void editRejected(const QString& reason);
 
  private:
@@ -72,8 +80,13 @@ class EditorSession : public QObject {
     pathforge::geometry::Vec2 start;
   };
 
+  friend struct UndoAccess;  // the undo commands mutate the document through these private helpers
+
+  // Raw mutation: applies `fn` to the document, regenerates derived geometry and (outside drags) validates.
+  // Does NOT record history; commands call it from redo()/undo(). Returns false and emits editRejected() on
+  // EditError.
   template <class Fn>
-  bool apply(Fn&& fn);
+  bool mutate(Fn&& fn);
   void regenerate();
   void validateNow();
 
@@ -82,6 +95,7 @@ class EditorSession : public QObject {
   std::optional<pathforge::editor::PointId> selection_;
   std::optional<Drag> drag_;
   QString filePath_;
+  QUndoStack undo_;
   pathforge::geometry::ValidationReport report_;
   std::uint64_t reportRevision_ = 0;
   bool hasReport_ = false;
