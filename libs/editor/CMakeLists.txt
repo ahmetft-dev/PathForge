@@ -1,5 +1,6 @@
 add_library(pathforge_editor STATIC
   src/track_document.cpp
+  src/derived_geometry.cpp
 )
 add_library(pathforge::editor ALIAS pathforge_editor)
 target_include_directories(pathforge_editor PUBLIC include)

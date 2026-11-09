@@ -30,7 +30,7 @@ target_link_libraries(pathforge_geometry_tests PRIVATE
 gtest_discover_tests(pathforge_geometry_tests)
 
 # ---- Editor (editable document) tests
-add_executable(pathforge_editor_tests track_document_test.cpp)
+add_executable(pathforge_editor_tests track_document_test.cpp derived_geometry_test.cpp)
 target_link_libraries(pathforge_editor_tests PRIVATE pathforge::editor pathforge_warnings GTest::gtest_main)
 gtest_discover_tests(pathforge_editor_tests)
 
