@@ -34,10 +34,11 @@ Path makeStadium(double length, double width, std::size_t pointCount);
 /// The first half turns LEFT (positive curvature), the second half turns RIGHT (negative); the
 /// curvature sign changes once, near x = length / 2. Starts at (0, 0) and ends at (length, 0).
 /// The spline approximates the sine (it is not the sine itself); its length and curvature are
-/// numerical results. Caveat: a Catmull-Rom spline has only piecewise-smooth curvature, so the
-/// discrete curvature carries errors of order 10% of the peak value; small-magnitude sign flips
-/// can occur near the ends and the inflection. Count sign changes with a threshold relative to the
-/// peak curvature (see countSignChanges()).
+/// numerical results. Caveat: a Catmull-Rom spline is only C1, its curvature is discontinuous at the
+/// control points, and with 17 control points it deviates from the sine's true curvature by up to ~27%
+/// of the peak value (measured, docs/curvature-study.md); small-magnitude sign flips occur near the
+/// ends and the inflection. This is a property of the spline, not of the discrete estimator. Count sign
+/// changes with a threshold relative to the peak curvature (see countSignChanges()).
 ///
 Path makeSCurve(double length, double amplitude, std::size_t pointCount);
 

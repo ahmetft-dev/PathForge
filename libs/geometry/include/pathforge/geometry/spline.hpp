@@ -42,4 +42,24 @@ struct SplineOptions {
 ///   consecutive duplicates incl. closing pair), alpha outside [0, 1], or invalid samplesPerSegment.
 Path catmullRomSpline(const std::vector<Vec2>& control, Closure closure, SplineOptions options = {});
 
+/// ANALYTIC signed curvature of the same spline, kappa = (x' y'' - y' x'') / (x'^2 + y'^2)^(3/2), with the
+/// derivatives taken exactly (product rule through the Barry-Goldman pyramid) with respect to the knot
+/// parameter. Returned at exactly the parametric samples that catmullRomSpline() emits for the same arguments
+/// (same size and order), positive = left turn.
+///
+/// This is a DIFFERENT quantity from Path::curvature() (Menger curvature of the sampled polyline); the two
+/// must not be mixed. Differences that matter:
+///  - It is the curvature of the spline curve itself, free of discretisation error of the sampling.
+///  - Catmull-Rom is only C1: curvature is DISCONTINUOUS at control points. At a control point the value of
+///  the
+///    segment that STARTS there (u = 0) is returned; for an open spline the last control point returns the
+///    left-sided limit of the last segment (u = 1).
+///  - Within a segment the curve is a cubic, so curvature varies smoothly; across a control point it jumps.
+///    This jump (not the polyline discretisation) is the origin of the "noise" seen in Menger curvature of
+///    sampled splines. See docs/curvature-study.md.
+/// Where the first derivative vanishes (a cusp) the curvature is undefined and 0 is returned.
+/// @throws GeometryError for the same invalid inputs as catmullRomSpline().
+std::vector<double> catmullRomCurvature(const std::vector<Vec2>& control, Closure closure,
+                                        SplineOptions options = {});
+
 }  // namespace pathforge::geometry
