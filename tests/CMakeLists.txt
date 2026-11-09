@@ -16,6 +16,7 @@ add_executable(pathforge_geometry_tests
   vec2_test.cpp
   path_test.cpp
   circle_test.cpp
+  frames_test.cpp
 )
 target_link_libraries(pathforge_geometry_tests PRIVATE
   pathforge::geometry pathforge_warnings GTest::gtest_main)
