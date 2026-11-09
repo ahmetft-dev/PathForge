@@ -7,7 +7,15 @@ PathForge is an experimental, cross-platform engineering application being devel
 Rather than becoming a racing game, PathForge is intended to be a workspace for **experimentation, visualization, and engineering analysis**. The project starts with motorsport applications and may later expand into robotics and autonomous racing.
 
 > [!IMPORTANT]
-> **Project status: pre-alpha.** Implemented so far: a Qt-free geometry library (paths, Catmull–Rom splines, arc-length resampling, tangents/normals/curvature, constant-width track boundaries, circle / oval / S-curve presets), a CLI, a Qt 6 Studio viewport and unit tests. See [docs/geometry.md](docs/geometry.md) for methods and limitations. Everything else described below is a development goal, not an implemented capability. There is no release or performance data yet.
+> **Project status: pre-alpha.** Implemented so far: a Qt-free geometry library (paths, Catmull–Rom splines with an
+> analytic-curvature variant, arc-length resampling, tangents/normals/curvature, constant and variable track widths,
+> boundaries, **global track validation with clearance metrics**, circle / oval / S-curve presets), a Qt-free I/O
+> library (**versioned JSON track files, atomic saves**), a CLI (`circle|oval|scurve`, `track validate|inspect`,
+> JSON export), a Qt 6 Studio (viewport, presets, **open/save, validation diagnostics, issue overlays**) and
+> automated tests. Everything else described below is a development goal, not an implemented capability. There is
+> no release and no vehicle, lap-time or optimisation code. See [docs/geometry.md](docs/geometry.md),
+> [docs/validation.md](docs/validation.md), [docs/track-format.md](docs/track-format.md) and
+> [docs/curvature-study.md](docs/curvature-study.md) for methods, tolerances and limitations.
 
 ## Why PathForge?
 
@@ -119,7 +127,7 @@ This layout is a target, **not a claim that every module already exists**.
 | Build system | CMake |
 | Linear algebra | Eigen, where needed |
 | Automated tests | GoogleTest / CTest |
-| Data exchange | Versioned JSON and CSV |
+| Data exchange | Versioned JSON (implemented, nlohmann/json) and CSV (planned) |
 | CI | GitHub Actions |
 | Target platforms | macOS (including Apple Silicon), Windows, Linux |
 
@@ -128,7 +136,8 @@ A numerical solver will be selected when its requirements are clear; one will no
 ## Roadmap
 
 - [x] **Phase 0 — Foundation:** CMake project, Qt shell, test harness, CI configuration, coding conventions (CI results unverified until first run on GitHub).
-- [ ] **Phase 1 — Track geometry** *(implemented: spline, resampling, curvature, constant-width boundaries, 3 presets, viewport; NOT yet: validation engine, track editor, JSON I/O)*: Centerlines, boundaries, splines, curvature, 2D visualization, serialization.
+- [x] **Phase 1A — Advanced track geometry:** splines, arc-length resampling, tangents/normals/curvature, boundaries, circle/oval/S-curve presets (all six GitHub Actions jobs passed on `84f9a09`).
+- [ ] **Phase 1B — Track validation & persistence** *(implemented and tested locally; not yet verified on GitHub Actions)*: global validation, clearance metrics, variable widths, JSON schema v1, file I/O, CLI and Studio integration, curvature study. **Not yet:** interactive track editor (Phase 1C), area-overlap detection, C2 splines.
 - [ ] **Phase 2 — First lap simulation (`v0.1` goal):** Point-mass model, speed profile, braking constraints, estimated lap time, headless execution.
 - [ ] **Phase 3 — Racing-line optimization:** Shortest path, minimum curvature, physical/geometric comparison.
 - [ ] **Phase 4 — Experiments and telemetry:** Parameter sweeps, plots, export, regression and performance benchmarks.
@@ -148,6 +157,8 @@ ctest --preset default
 ./build/release/apps/pathforge-cli/pathforge-cli circle --radius 100 --points 360
 ./build/release/apps/pathforge-cli/pathforge-cli oval --length 300 --width 120 --points 512
 ./build/release/apps/pathforge-cli/pathforge-cli scurve --points 256
+./build/release/apps/pathforge-cli/pathforge-cli oval --points 512 --output oval.json
+./build/release/apps/pathforge-cli/pathforge-cli track validate oval.json
 ```
 
 PathForge Studio is built automatically when Qt 6 is found. See [docs/building.md](docs/building.md) for options,
@@ -170,7 +181,7 @@ Experimental results should report their **model assumptions and limitations**. 
 
 PathForge is a **non-commercial personal research project**: I am building it to learn, experiment, and share engineering work, not to sell a product. The intention is to publish the code openly and welcome technical contributions as the project matures.
 
-PathForge is released under the [MIT License](LICENSE). See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. Note that the MIT license permits third-party commercial use even though this project itself has no commercial purpose.
+PathForge is released under the [MIT License](LICENSE). Third-party dependencies (fetched at configure time if not installed): GoogleTest (BSD-3-Clause), nlohmann/json (MIT); the optional Studio uses Qt 6 (LGPLv3/GPL, dynamically linked). See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. Note that the MIT license permits third-party commercial use even though this project itself has no commercial purpose.
 
 At the planning stage, the most useful feedback concerns numerical methods, vehicle modeling assumptions, test design, and maintainable C++ architecture.
 

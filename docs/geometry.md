@@ -21,16 +21,17 @@ Namespace `pathforge::geometry`. No Qt, no third-party dependencies. SI units (m
 | `resampleByArcLength` | Equal arc-length spacing measured **along the input polyline**, linear interpolation inside segments. Interval count `round(L / spacing)`, so the spacing is adjusted to fit exactly (reported in `ResampleResult::spacing`). Closed: seam not duplicated, ≥ 3 samples. | Not exact spline arc length — only as accurate as the input polyline. Chord distance between samples is slightly below the arc spacing (≈ `(κh)²/24` relative). Resampling **finer than the input's vertex spacing** makes the output's discrete curvature meaningless (it grows ∝ 1/spacing). |
 | `Path::curvature` | Menger curvature of each vertex and its two neighbours (reciprocal radius of the circumscribed circle, signed). Open-path end points copy the nearest interior value. | Exact for points on a circle; otherwise a discrete estimate with noise ≈ position error / spacing². This is *not* a spline-derivative curvature and the two must not be mixed. |
 | `computeFrames` | Tangent = length-weighted bisector of the unit chords at a vertex. | Exact tangent of the circle through three points (any spacing), 2nd-order on smooth curves; open-path ends are one-sided (1st order). Cusps fall back to the outgoing chord. |
-| `Track::create` | Constant left/right half-widths; `left = c + wL·N`, `right = c − wR·N` per vertex. | Offsets are along vertex normals, not true parallel curves. |
+| `catmullRomCurvature` | Analytic spline curvature from exact derivatives (separate from Menger). | Discontinuous at control points (C1 spline); see [curvature-study.md](curvature-study.md). |
+| `Track::create` | Constant or per-vertex left/right half-widths; `left = c + wL·N`, `right = c − wR·N` per vertex. `sampleWidthProfile` evaluates piecewise-linear arc-length width profiles (periodic for closed paths). | Offsets are along vertex normals, not true parallel curves. |
 | `makeCircle`, `makeRoundedRectangle`, `makeStadium` | Vertices lie exactly on the analytical curve at equal arc spacing. | Sampled perimeter is slightly below the analytical one (`≤ (h/r)²/24` relative). |
-| `makeSCurve` | 17 control points on `y = −A sin(2πx/L)` → centripetal spline → arc-length resampling. | Approximates the sine; curvature has ~10 % of peak noise near the ends/inflection, so count sign changes with a threshold (`countSignChanges`). |
+| `makeSCurve` | 17 control points on `y = −A sin(2πx/L)` → centripetal spline → arc-length resampling. | Approximates the sine; the spline's curvature deviates by up to ~27 % of the peak and has small sign flips near the ends/inflection, so count sign changes with a threshold (`countSignChanges`). See [curvature-study.md](curvature-study.md). |
 
-## Track boundaries — what is and is not checked
+## Track boundaries and validation
 
-`TrackDiagnostics` reports **local** problems only: boundary segments whose direction reverses relative to
-the centerline, and vertices where `width × curvature ≥ 1` on the inside of a turn. A track with no reported
-issue is **not** thereby valid: global self-intersection, boundary crossings between distant sections and
-physical feasibility are not checked.
+`Track::diagnostics()` only counts **local** problems (reversed offset segments, `width × curvature ≥ 1`). Use
+`validateTrackData` / `validateTrack` ([validation.md](validation.md)) for global checks: centerline and boundary
+self-intersections, left/right crossings, collapse, clearance. A track is only "valid" if all check groups ran
+without errors, and even then not proven valid in the continuous sense or drivable. Files: [track-format.md](track-format.md).
 
 ## Presets
 
