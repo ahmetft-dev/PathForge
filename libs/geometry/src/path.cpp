@@ -104,7 +104,17 @@ PathStats computeStats(const Path& path) {
   double sumAbs = 0.0;
   for (double v : k) sumAbs += std::abs(v);
   st.meanAbsCurvature = sumAbs / static_cast<double>(k.size());
+  st.minAbsCurvature = st.maxAbsCurvature = std::abs(k[0]);
+  for (double v : k) {
+    st.minAbsCurvature = std::min(st.minAbsCurvature, std::abs(v));
+    st.maxAbsCurvature = std::max(st.maxAbsCurvature, std::abs(v));
+  }
   return st;
+}
+
+Path reversed(const Path& path) {
+  std::vector<Vec2> pts(path.points().rbegin(), path.points().rend());
+  return Path::create(std::move(pts), path.closure());
 }
 
 }  // namespace pathforge::geometry

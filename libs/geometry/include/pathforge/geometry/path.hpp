@@ -97,8 +97,13 @@ struct PathStats {
   double minCurvature = 0.0;      ///< [1/m], signed
   double maxCurvature = 0.0;      ///< [1/m], signed
   double meanAbsCurvature = 0.0;  ///< [1/m]
+  double minAbsCurvature = 0.0;   ///< [1/m]
+  double maxAbsCurvature = 0.0;   ///< [1/m]
 };
 
 PathStats computeStats(const Path& path);
+
+/// Same points in reverse order (travel direction flipped, closure kept). Curvature changes sign.
+Path reversed(const Path& path);
 
 }  // namespace pathforge::geometry
