@@ -307,6 +307,60 @@ class StudioAsyncTest : public QObject {
     QVERIFY(changed != pg::ValidationStatus::Valid || true);
     QCOMPARE(s.report().status(), truth(s));
   }
+
+  // Phase 1D: switching the interpolation changes the geometry (and the spline health), so a validation still
+  // running for the previous interpolation must never be adopted as the current report.
+  void switchingInterpolationInvalidatesInFlightValidation() {
+    EditorSession s;
+    s.setAsyncThreshold(0);
+    s.setValidationDebounce(0);
+    QSemaphore gate;
+    s.runner()->setWorkerHook([&] { gate.acquire(); });
+    pfe::TrackDocument d = polylineCircle(12, 100.0);
+    pfe::GeometrySettings gs = d.settings();
+    gs.interpolation = pfe::Interpolation::CatmullRom;
+    gs.resampleSpacing = 2.0;
+    d.setSettings(gs);
+    s.replaceDocument(d, QString());
+    QTRY_COMPARE_WITH_TIMEOUT(s.runner()->startedJobs(), std::uint64_t{1}, 3000);  // held
+    const auto crGeometry = s.derived().data.centerline;
+    gs.interpolation = pfe::Interpolation::CubicC2;
+    QVERIFY(s.setSettings(gs));
+    QVERIFY(s.derived().data.centerline != crGeometry);
+    QVERIFY(!s.isReportCurrent());
+    gate.release(1);  // the Catmull-Rom job finishes: stale
+    QTRY_VERIFY_WITH_TIMEOUT(s.discardedResults() >= 1, 3000);
+    QVERIFY(!s.isReportCurrent());
+    gate.release(5);
+    QTRY_VERIFY_WITH_TIMEOUT(s.isReportCurrent(), 5000);
+    QCOMPARE(s.report().status(), truth(s));
+    QVERIFY(s.derived().splineHealth.checked);  // the C2 health belongs to the geometry now shown
+  }
+
+  // A C2 track above the default asynchronous threshold validates in the background and the delivered report
+  // equals the synchronous one (surface analysis included).
+  void largeC2TrackValidatesAsynchronouslyWithTheSameVerdict() {
+    EditorSession s;  // default threshold (1500 samples)
+    s.setValidationDebounce(0);
+    pfe::TrackDocument d;
+    d.setClosure(pfe::Closure::Closed);
+    pfe::GeometrySettings gs;
+    gs.interpolation = pfe::Interpolation::CubicC2;
+    gs.resampleSpacing = 1.0;
+    d.setSettings(gs);
+    for (int i = 0; i < 24; ++i) {
+      const double a = 2.0 * std::numbers::pi * i / 24;
+      d.appendPoint({400.0 * std::cos(a), 250.0 * std::sin(a)}, 5.0, 5.0);
+    }
+    s.replaceDocument(d, QString());
+    QVERIFY(s.derived().data.centerline.size() > 1500);
+    QVERIFY(!s.isReportCurrent());
+    QTRY_VERIFY_WITH_TIMEOUT(s.isReportCurrent(), 10000);
+    const pg::ValidationReport sync = pg::validateTrackData(s.derived().data);
+    QCOMPARE(s.report().status(), sync.status());
+    QCOMPARE(s.report().issues.size(), sync.issues.size());
+    QVERIFY(s.report().checked.surface);
+  }
 };
 
 QTEST_MAIN(StudioAsyncTest)
