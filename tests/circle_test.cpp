@@ -70,7 +70,9 @@ TEST(Circle, CircumferenceConvergesQuadratically) {
     // (~1e-9 at n=16), far below the 1e-6 tolerance.
     // Measurement noise ~1e-15 absolute, negligible against e >= ~3e-6 at n=512.
     EXPECT_NEAR(e / predicted, 1.0, 1e-6) << "n=" << n;
-    if (prev > 0.0) EXPECT_NEAR(prev / e, 4.0, 0.05) << "n=" << n;  // O(h^2) => factor ~4
+    if (prev > 0.0) {
+      EXPECT_NEAR(prev / e, 4.0, 0.05) << "n=" << n;  // O(h^2) => factor ~4
+    }
     prev = e;
   }
   // Concrete sanity value: N=1000 gives relative error ~1.645e-6.
