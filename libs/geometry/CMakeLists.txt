@@ -8,6 +8,7 @@ add_library(pathforge_geometry STATIC
   src/shapes.cpp
   src/width_profile.cpp
   src/track_data.cpp
+  src/predicates.cpp
 )
 add_library(pathforge::geometry ALIAS pathforge_geometry)
 target_include_directories(pathforge_geometry PUBLIC include)

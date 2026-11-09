@@ -21,6 +21,7 @@ add_executable(pathforge_geometry_tests
   frames_test.cpp
   track_test.cpp
   shapes_test.cpp
+  predicates_test.cpp
   width_test.cpp
 )
 target_link_libraries(pathforge_geometry_tests PRIVATE
