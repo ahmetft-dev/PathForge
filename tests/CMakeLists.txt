@@ -19,6 +19,7 @@ add_executable(pathforge_geometry_tests
   spline_test.cpp
   resample_test.cpp
   frames_test.cpp
+  cubic_spline_test.cpp
   track_test.cpp
   shapes_test.cpp
   predicates_test.cpp
