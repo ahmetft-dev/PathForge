@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 2,
+  "name": "Future",
+  "units": "SI",
+  "coordinateSystem": "xy-right-handed",
+  "closed": true,
+  "centerline": [
+    {
+      "x": 0,
+      "y": 0
+    },
+    {
+      "x": 10,
+      "y": 0
+    },
+    {
+      "x": 10,
+      "y": 10
+    }
+  ],
+  "widths": {
+    "left": 1.0,
+    "right": 1.0
+  }
+}

@@ -28,3 +28,9 @@ add_executable(pathforge_geometry_tests
 target_link_libraries(pathforge_geometry_tests PRIVATE
   pathforge::geometry pathforge_warnings GTest::gtest_main)
 gtest_discover_tests(pathforge_geometry_tests)
+
+# ---- I/O library tests
+add_executable(pathforge_io_tests io_test.cpp)
+target_link_libraries(pathforge_io_tests PRIVATE pathforge::io pathforge_warnings GTest::gtest_main)
+target_compile_definitions(pathforge_io_tests PRIVATE PATHFORGE_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+gtest_discover_tests(pathforge_io_tests)

@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "name": "Bowtie (self-intersecting centerline)",
+  "units": "SI",
+  "coordinateSystem": "xy-right-handed",
+  "closed": true,
+  "centerline": [
+    {
+      "x": 0,
+      "y": 0
+    },
+    {
+      "x": 200,
+      "y": 200
+    },
+    {
+      "x": 200,
+      "y": 0
+    },
+    {
+      "x": 0,
+      "y": 200
+    }
+  ],
+  "widths": {
+    "left": 0.01,
+    "right": 0.01
+  }
+}
