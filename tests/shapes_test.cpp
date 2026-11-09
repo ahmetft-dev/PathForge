@@ -174,10 +174,10 @@ TEST(SCurve, SamplesAreEquallySpacedInArcLength) {
   EXPECT_LT(hi / lo - 1.0, 1e-4);
 }
 
-// Catmull-Rom curvature is only piecewise smooth, so the discrete curvature has ~10% of peak
-// noise near the ends and the inflection (documented). We therefore require the sign pattern only
-// where |kappa| exceeds 25% of the peak: exactly one change, left-turning before, right-turning after,
-// located near the middle.
+// Catmull-Rom curvature is only piecewise smooth (jumps at control points, up to ~27% of the peak away from
+// the sine's true curvature, see docs/curvature-study.md) - this is the spline, not the estimator. We
+// therefore require the sign pattern only where |kappa| exceeds 25% of the peak: exactly one change,
+// left-turning before, right-turning after, located near the middle.
 TEST(SCurve, CurvatureChangesSignOnceFromLeftToRight) {
   const double L = 300.0;
   const Path s = makeSCurve(L, 30.0, 512);

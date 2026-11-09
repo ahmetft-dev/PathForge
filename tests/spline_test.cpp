@@ -179,3 +179,120 @@ TEST(Spline, RejectsInvalidInput) {
   EXPECT_THROW(catmullRomSpline(ok, Closure::Open, {4, 1.1}), GeometryError);
   EXPECT_THROW(catmullRomSpline(ok, Closure::Open, {4, nan}), GeometryError);
 }
+
+// ---- Analytic (derivative-based) spline curvature, see docs/curvature-study.md
+
+TEST(SplineCurvature, OutputAlignsWithSplineSamples) {
+  const std::vector<Vec2> c{{0, 0}, {10, 5}, {18, -3}, {30, 2}, {41, 9}};
+  SplineOptions o;
+  o.samplesPerSegment = 7;
+  EXPECT_EQ(catmullRomCurvature(c, Closure::Open, o).size(), catmullRomSpline(c, Closure::Open, o).size());
+  EXPECT_EQ(catmullRomCurvature(c, Closure::Closed, o).size(),
+            catmullRomSpline(c, Closure::Closed, o).size());
+}
+
+// Collinear control points give a straight segment: x' and x'' are parallel, so the cross product vanishes up
+// to rounding (observed 8.5e-16 1/m for coordinates of order 10).
+TEST(SplineCurvature, StraightLineHasZeroCurvature) {
+  const std::vector<Vec2> c{{0, 0}, {3, 1}, {4, 4.0 / 3}, {10, 10.0 / 3}, {17, 17.0 / 3}};
+  for (double k : catmullRomCurvature(c, Closure::Open, {32, 0.5})) EXPECT_NEAR(k, 0.0, 1e-12);
+}
+
+// The spline through points on a circle approximates the circle with curvature error O(h^2) in the control
+// spacing h (observed ratios 4.1 and 4.0 for M = 16 -> 32 -> 64), so the error must shrink by about 4 per
+// doubling.
+TEST(SplineCurvature, CircleCurvatureErrorConvergesQuadraticallyInControlSpacing) {
+  const double r = 100.0;
+  double prev = 0.0;
+  for (int m : {16, 32, 64}) {
+    SplineOptions o;
+    o.samplesPerSegment = 64;
+    double err = 0.0;
+    for (double k : catmullRomCurvature(circleControl(r, uniformAngles(m)), Closure::Closed, o)) {
+      err = std::max(err, std::abs(k * r - 1.0));
+    }
+    if (prev > 0.0) {
+      EXPECT_NEAR(prev / err, 4.0, 0.5) << "m=" << m;
+    }
+    prev = err;
+  }
+}
+
+// Menger curvature of the SAMPLED spline converges to the analytic curvature of the spline itself with
+// error O(h^2) in the sample spacing (observed ratio 4.0 per doubling of samples per segment), except at
+// knots where the curvature jumps. Away from knots at 64 samples the difference is 7.3e-6 / R observed; bound
+// 2e-5 / R.
+TEST(SplineCurvature, MengerOfSamplesConvergesToAnalyticAwayFromKnots) {
+  const double r = 100.0;
+  const auto control = circleControl(r, uniformAngles(32));
+  double prev = 0.0;
+  for (std::size_t s : {16u, 32u, 64u}) {
+    SplineOptions o;
+    o.samplesPerSegment = s;
+    const auto analytic = catmullRomCurvature(control, Closure::Closed, o);
+    const auto menger = catmullRomSpline(control, Closure::Closed, o).curvature();
+    double diff = 0.0;
+    for (std::size_t i = 0; i < analytic.size(); ++i) {
+      const std::size_t phase = i % s;
+      if (phase == 0 || phase + 1 == s) continue;  // knot and its neighbour: curvature is discontinuous there
+      diff = std::max(diff, std::abs(menger[i] - analytic[i]) * r);
+    }
+    if (prev > 0.0) {
+      EXPECT_NEAR(prev / diff, 4.0, 0.5) << "s=" << s;
+    }
+    prev = diff;
+    if (s == 64) {
+      EXPECT_LT(diff, 2e-5);
+    }
+  }
+}
+
+// Uniform control points on a circle: the spline is invariant under rotation by one control interval, so the
+// analytic curvature must repeat with that period, also across the wrap-around seam (rounding only: 4e-16
+// observed).
+TEST(SplineCurvature, ClosedSeamHasNoSpecialTreatment) {
+  SplineOptions o;
+  o.samplesPerSegment = 64;
+  const auto k = catmullRomCurvature(circleControl(100.0, uniformAngles(32)), Closure::Closed, o);
+  for (std::size_t i = 0; i < k.size(); ++i) EXPECT_NEAR(k[i], k[(i + 64) % k.size()], 1e-12) << i;
+}
+
+// The curvature of a C1 spline jumps at control points: on a coarse circle the analytic value just before a
+// knot differs from the value at the knot (observed 5.6 % of 1/R for 8 points), which a C2 spline would not
+// do.
+TEST(SplineCurvature, CurvatureIsDiscontinuousAtControlPoints) {
+  SplineOptions o;
+  o.samplesPerSegment = 64;
+  const double r = 100.0;
+  const auto k = catmullRomCurvature(circleControl(r, uniformAngles(8)), Closure::Closed, o);
+  const double jump = std::abs(k[64] - k[63]) * r;  // knot 1 vs the sample just before it
+  EXPECT_GT(jump, 1e-2);
+  // Within a segment the change between neighbouring samples is far smaller than the jump at the knot.
+  EXPECT_LT(std::abs(k[33] - k[32]) * r, 0.2 * jump);
+}
+
+// Both curvature definitions agree on the qualitative structure of an S-curve: one sign change above 25% of
+// the peak.
+TEST(SplineCurvature, SCurveSignStructureMatchesMenger) {
+  std::vector<Vec2> c;
+  for (int i = 0; i <= 16; ++i) {
+    c.push_back({300.0 * i / 16, (i == 0 || i == 16) ? 0.0 : -30.0 * std::sin(2.0 * kPi * i / 16)});
+  }
+  SplineOptions o;
+  o.samplesPerSegment = 64;
+  const auto analytic = catmullRomCurvature(c, Closure::Open, o);
+  const auto menger = catmullRomSpline(c, Closure::Open, o).curvature();
+  double peakA = 0.0, peakM = 0.0;
+  for (double v : analytic) peakA = std::max(peakA, std::abs(v));
+  for (double v : menger) peakM = std::max(peakM, std::abs(v));
+  EXPECT_EQ(countSignChanges(analytic, 0.25 * peakA), 1u);
+  EXPECT_EQ(countSignChanges(menger, 0.25 * peakM), 1u);
+  EXPECT_NEAR(peakM / peakA, 1.0, 0.01);  // observed 1.4544e-2 vs 1.4574e-2
+}
+
+TEST(SplineCurvature, RejectsInvalidInput) {
+  EXPECT_THROW(catmullRomCurvature({}, Closure::Open), GeometryError);
+  EXPECT_THROW(catmullRomCurvature({{0, 0}, {0, 0}, {1, 1}}, Closure::Open), GeometryError);
+  EXPECT_THROW(catmullRomCurvature({{0, 0}, {1, 0}, {1, 1}}, Closure::Open, {0, 0.5}), GeometryError);
+  EXPECT_THROW(catmullRomCurvature({{0, 0}, {1, 0}, {1, 1}}, Closure::Open, {4, 2.0}), GeometryError);
+}
