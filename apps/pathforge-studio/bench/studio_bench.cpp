@@ -19,13 +19,15 @@
 
 namespace pfe = pathforge::editor;
 
-static pfe::TrackDocument splineDoc(std::size_t samples) {
+static pfe::TrackDocument splineDoc(std::size_t samples,
+                                    pfe::Interpolation interp = pfe::Interpolation::CatmullRom) {
   const double perimeter = static_cast<double>(samples);  // 1 m spacing
   const double a = perimeter / (2.0 * std::numbers::pi) * 1.25, b = a * 0.6;
   pfe::TrackDocument d;
   d.setClosure(pfe::Closure::Closed);
   pfe::GeometrySettings s;
   s.resampleSpacing = 1.0;
+  s.interpolation = interp;
   d.setSettings(s);
   for (int i = 0; i < 24; ++i) {
     const double t = 2.0 * std::numbers::pi * i / 24;
@@ -76,7 +78,9 @@ int main(int argc, char** argv) {
   };
   std::vector<Case> cases;
   for (std::size_t n : {100u, 1000u, 4000u, 10000u})
-    cases.push_back({"spline, 24 control points", splineDoc(n)});
+    cases.push_back({"Catmull-Rom, 24 control points", splineDoc(n)});
+  for (std::size_t n : {100u, 1000u, 4000u, 10000u})
+    cases.push_back({"C2 cubic, 24 control points", splineDoc(n, pfe::Interpolation::CubicC2)});
   for (std::size_t n : {1000u, 4000u})
     cases.push_back({"polyline, N control points (preset)", polylineDoc(n)});
   for (Case& c : cases) {
