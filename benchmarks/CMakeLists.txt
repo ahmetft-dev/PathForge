@@ -1,0 +1,4 @@
+add_executable(curvature_study curvature_study.cpp)
+target_link_libraries(curvature_study PRIVATE pathforge::geometry pathforge_warnings)
+add_executable(validation_bench validation_bench.cpp)
+target_link_libraries(validation_bench PRIVATE pathforge::geometry pathforge_warnings)
