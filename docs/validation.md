@@ -89,3 +89,59 @@ separately measured) and (c) run on a worker thread for larger tracks, on an imm
 generation and obsolete ones dropped. No spatial index was added: at the measured sizes validation is never on the interactive
 path. Tracks much larger than the benchmarked ones, or with many overlapping segment bounding boxes, may need the bounding-box
 grid mentioned earlier.
+
+## Corridor surface (Phase 1D)
+
+The track surface is approximated by **strips** `Q_i = (L_i, L_{i+1}, R_{i+1}, R_i)` between corresponding left/right samples
+(one per centerline segment; a closed track is an annulus, the last strip joins the first through the seam). In a well-formed
+corridor every strip is clockwise (negative signed area). `analyzeSurface()` (`surface.hpp`) reports
+
+| Defect | Meaning | Issue type |
+| --- | --- | --- |
+| Folded | strip reversed (left/right swapped) or self-intersecting (bow-tie) | `FoldedTrackStrip` |
+| Degenerate | area ≈ 0 relative to length × width (collapsed to a line/point) | `DegenerateTrackStrip` |
+| Overlap | two strips cover a common area | `SurfaceOverlap` |
+
+What is **not** an overlap: adjacent strips (including the seam pair) share exactly their common cross-section edge `L_{i+1}R_{i+1}`;
+touching there, or at the shared vertices, is expected. For adjacent strips only a proper crossing of other edges, a collinear
+fold-back or a non-shared vertex strictly inside the other strip counts. Non-adjacent strips share nothing in a well-formed
+corridor, so any common point (crossing, touching, collinear overlap, contained vertex) is an overlap. Folded or degenerate strips
+are excluded from the overlap tests (their overlaps are a consequence).
+
+**Predicates and cost.** Orientation uses the scale-relative filtered predicate (Shewchuk-style error bound) with a crossing-number
+point-in-polygon; strip areas are computed relative to a vertex so coordinates far from the origin do not cancel (tested at 1e6 m
+offsets and 1e-3…1e3 scales). The broad phase is a uniform grid with reference-cell de-duplication, O(S) for evenly distributed
+strips; `BroadPhase::BruteForce` is the O(S²) reference used as an oracle in the tests.
+
+**No diagnostic floods.** Overlapping strip pairs are clustered into connected *regions* (one `SurfaceOverlap` per region, referencing
+the first strip of each side). A surface defect that is already explained by a boundary-level issue (a strip implicated in a boundary
+self-intersection, left/right crossing, local fold or collapse) is not reported a second time; it is counted in
+`ValidationReport::surfaceDefectsMerged`. In practice almost every genuinely overlapping corridor also produces boundary crossings, so
+the surface group mostly *confirms* those and adds its own issue only where the boundary checks stay silent. Strips touching a
+zero-width sample are skipped (already `InvalidWidth`) and then `checked.surface` stays false (Incomplete rather than Valid).
+
+**Status.** `CheckCoverage::surface` is part of `all()`; Valid/Invalid/Incomplete semantics are unchanged. Like all checks this
+validates the *sampled* corridor and says nothing about the continuous surface between samples or about drivability.
+
+## Spline health (Phase 1D)
+
+For C2 documents the editor evaluates the spline analytically at every control point and three interior fractions per segment.
+Zero velocity (cusp/stationary point) gives `InvalidSplineDerivative`; a non-finite derivative or curvature gives
+`CurvatureEvaluationFailure`. Both are errors, one issue per kind with the number of affected points, merged into the report by
+`mergeSplineHealth()` on the synchronous, asynchronous and CLI paths. A real stationary point is practically unreachable from
+distinct control points with the centripetal knots (the unit test therefore uses a synthetic record for the merge); the check is a
+guard so that a future curvature consumer never receives a silently meaningless value. Catmull–Rom and polyline interpolation are not checked.
+
+## Measured cost with surface analysis
+
+Release, Apple M4 Pro, AppleClang 21, median of 9 (`benchmarks/editor_bench`, closed ellipse, 1 m spacing):
+
+| Samples | surface (grid) | surface (brute force) | full validation |
+| ---: | ---: | ---: | ---: |
+| ≈100 | 0.08 ms | 0.08 ms | 0.13 ms |
+| ≈1,000 | 0.87 ms | 1.2 ms | 4.0 ms |
+| ≈4,000 | 3.5 ms | 9.6 ms | 50 ms |
+| ≈10,000 | 8.7 ms | 45 ms | 306 ms |
+
+Surface analysis is linear (≈ 0.9 µs per sample) while the existing boundary sweeps stay quadratic, so it adds ≈ 3 % at 10,000
+samples and ≈ 25 % at 1,000. The synchronous threshold of 1,500 samples is therefore ≈ 8 ms (extrapolated, not separately measured).

@@ -18,6 +18,8 @@ Namespace `pathforge::geometry`. No Qt, no third-party dependencies. SI units (m
 | Function | Method | Accuracy / caveats |
 | --- | --- | --- |
 | `catmullRomSpline` | Interpolating Catmull–Rom, centripetal (`alpha = 0.5`) by default, Barry–Goldman evaluation. Closed paths wrap; open paths use reflected phantom end points. Control points are emitted exactly. | C1 only (curvature is discontinuous at control points). Overshoot and self-intersection are possible. Centripetal parameterisation avoids cusps/loops within a segment (Yuksel et al. 2011) but does not guarantee less overshoot. Output is a polyline: its length is below the true spline length by O(h²). |
+| `cubicSpline` / `CubicSpline` | C2 interpolating parametric cubic spline, knots `t_{i+1} = t_i + |ΔP|^α` (α = 0.5 default). `x(t)`, `y(t)` are classical cubic splines: **natural** ends for open paths (`r'' = 0` at both ends), **periodic** for closed. Tridiagonal (cyclic via Sherman–Morrison) solve, strictly diagonally dominant (row-scaled condition ≤ 3, no pivoting). `evaluate()` returns position, `d1`, `d2`; control points are returned exactly. | C2 curve, continuous curvature, but κ′ jumps at knots; O(n) build, O(1) evaluation. Can overshoot, loop or self-intersect like any interpolant. Natural ends are a restriction (κ = 0 at the ends). |
+| `curvatureFromDerivatives`, `cubicSplineCurvature` | `κ = (x′y″ − y′x″)/(x′²+y′²)^{3/2}` with a **validity flag**: invalid (NaN) if a derivative is non-finite or speed < 1e-6 × the curve's reference speed. | Never returns a plausible number where the curve is stationary. |
 | `resampleByArcLength` | Equal arc-length spacing measured **along the input polyline**, linear interpolation inside segments. Interval count `round(L / spacing)`, so the spacing is adjusted to fit exactly (reported in `ResampleResult::spacing`). Closed: seam not duplicated, ≥ 3 samples. | Not exact spline arc length — only as accurate as the input polyline. Chord distance between samples is slightly below the arc spacing (≈ `(κh)²/24` relative). Resampling **finer than the input's vertex spacing** makes the output's discrete curvature meaningless (it grows ∝ 1/spacing). |
 | `Path::curvature` | Menger curvature of each vertex and its two neighbours (reciprocal radius of the circumscribed circle, signed). Open-path end points copy the nearest interior value. | Exact for points on a circle; otherwise a discrete estimate with noise ≈ position error / spacing². This is *not* a spline-derivative curvature and the two must not be mixed. |
 | `computeFrames` | Tangent = length-weighted bisector of the unit chords at a vertex. | Exact tangent of the circle through three points (any spacing), 2nd-order on smooth curves; open-path ends are one-sided (1st order). Cusps fall back to the outgoing chord. |
@@ -26,11 +28,15 @@ Namespace `pathforge::geometry`. No Qt, no third-party dependencies. SI units (m
 | `makeCircle`, `makeRoundedRectangle`, `makeStadium` | Vertices lie exactly on the analytical curve at equal arc spacing. | Sampled perimeter is slightly below the analytical one (`≤ (h/r)²/24` relative). |
 | `makeSCurve` | 17 control points on `y = −A sin(2πx/L)` → centripetal spline → arc-length resampling. | Approximates the sine; the spline's curvature deviates by up to ~27 % of the peak and has small sign flips near the ends/inflection, so count sign changes with a threshold (`countSignChanges`). See [curvature-study.md](curvature-study.md). |
 
+Curvature quantities are three different things: Menger (`Path::curvature`, discrete), analytic Catmull–Rom
+(`catmullRomCurvature`) and analytic C2 (`cubicSplineCurvature`). Measured accuracy and the convergence orders are in
+[curvature-study.md](curvature-study.md).
+
 ## Track boundaries and validation
 
 `Track::diagnostics()` only counts **local** problems (reversed offset segments, `width × curvature ≥ 1`). Use
 `validateTrackData` / `validateTrack` ([validation.md](validation.md)) for global checks: centerline and boundary
-self-intersections, left/right crossings, collapse, clearance. A track is only "valid" if all check groups ran
+self-intersections, left/right crossings, collapse, clearance and (Phase 1D) overlapping, folded or degenerate corridor strips (`surface.hpp`). A track is only "valid" if all check groups ran
 without errors, and even then not proven valid in the continuous sense or drivable. Files: [track-format.md](track-format.md).
 
 ## Presets

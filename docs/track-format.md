@@ -88,7 +88,7 @@ Stores what the user authored, never derived samples or boundaries; those are re
 | Field | Meaning |
 | --- | --- |
 | header (`schemaVersion`, `name`, `units`, `coordinateSystem`, `closed`) | as in version 1 |
-| `geometry.interpolation` | `"catmull-rom"` (centripetal family, C1) or `"polyline"` (straight segments, exact) |
+| `geometry.interpolation` | `"catmull-rom"` (centripetal family, C1), `"cubic-c2"` (C2 cubic spline: natural ends if open, periodic if closed; additive in Phase 1D) or `"polyline"` (straight segments, exact) |
 | `geometry.alpha` | Catmull–Rom knot exponent in [0, 1] (0.5 = centripetal); stored for both kinds |
 | `geometry.resampleSpacing` | equal arc-length spacing [m] of the derived samples; `0` = no resampling |
 | `controlPoints[]` | control points in order: position and the left/right half-widths **at that point** [m]; widths are interpolated linearly in arc length between points (periodically for closed tracks) |
@@ -112,4 +112,8 @@ Save → load → save is byte-identical.
 * Studio does not remember the path of an imported v1 file, so *Save* cannot silently overwrite it with a v2 document; *Save As*
   writes schema v2. `parseTrackJson()`/`loadTrackFile()` (the sampled-track API) stay v1-only and point v2 files to the document API.
 
-Fixtures: `tests/data/editable_*_v2.json`.
+**Compatibility of `"cubic-c2"`.** The value was added to schema v2 without a version bump: documents that do not use it are
+byte-for-byte unchanged and every existing v1/v2 file opens as before. A file that uses `"cubic-c2"` is rejected by builds older
+than Phase 1D with an "unknown interpolation" error (their message lists the values they know); Phase 1D builds name the required version.
+
+Fixtures: `tests/data/editable_*_v2.json` (`editable_c2_v2.json` uses `"cubic-c2"`).

@@ -36,7 +36,7 @@ set `QT_QPA_PLATFORM=offscreen` on headless machines).
 | `PATHFORGE_BUILD_TESTS` | ON | Build unit tests |
 | `PATHFORGE_BUILD_CLI` | ON | Build `pathforge-cli` |
 | `PATHFORGE_BUILD_STUDIO` | AUTO | `AUTO` / `ON` / `OFF` |
-| `PATHFORGE_BUILD_BENCHMARKS` | OFF | `validation_bench` and `curvature_study` (not run by CTest) |
+| `PATHFORGE_BUILD_BENCHMARKS` | OFF | `validation_bench`, `curvature_study`, `editor_bench` and the Studio `studio_bench` (not run by CTest) |
 | `PATHFORGE_WARNINGS_AS_ERRORS` | OFF | `-Werror` / `/WX` |
 
 ## Track files and validation from the command line

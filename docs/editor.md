@@ -103,16 +103,33 @@ Release, Apple M4 Pro, AppleClang 21, median values. `studio_bench` used Qt's **
 
 | Document | Samples | Regenerate | Validate (full) | Edit + scene rebuild | Repaint | **Per mouse move** (p95) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| spline, 24 control points | 133 | 0.10 ms | 0.18 ms | 0.17 ms | 1.2 ms | **1.4 ms** (1.6) |
-| spline, 24 control points | 1,015 | 0.32 ms | 4.1 ms | 0.41 ms | 3.8 ms | **4.2 ms** (4.3) |
-| spline, 24 control points | 4,061 | 1.36 ms | 45 ms | 1.25 ms | 4.6 ms | **5.9 ms** (6.7) |
-| spline, 24 control points | 10,155 | 1.37 ms | 291 ms | 1.81 ms | 4.7 ms | **6.5 ms** (7.5) |
+| Catmull–Rom, 24 control points | 133 | 0.10 ms | 0.18 ms | 0.17 ms | 1.2 ms | **1.4 ms** (1.6) |
+| Catmull–Rom, 24 control points | 1,015 | 0.32 ms | 4.1 ms | 0.41 ms | 3.8 ms | **4.2 ms** (4.3) |
+| Catmull–Rom, 24 control points | 4,061 | 1.36 ms | 45 ms | 1.25 ms | 4.6 ms | **5.9 ms** (6.7) |
+| Catmull–Rom, 24 control points | 10,155 | 1.37 ms | 291 ms | 1.81 ms | 4.7 ms | **6.5 ms** (7.5) |
 | polyline preset, N control points | 1,000 | 0.03 ms | 3.0 ms | 0.25 ms | 4.2 ms | **4.4 ms** (5.1) |
 | polyline preset, N control points | 4,000 | 0.12 ms | 44 ms | 0.43 ms | 4.8 ms | **5.2 ms** (5.3) |
+
+**Phase 1D re-measurement** (same machine, method and `studio_bench`; Catmull–Rom re-run within noise of the table above:
+1.4 / 4.5 / 5.1 / 6.5 ms per move). The **C2 spline** drags cheaper than Catmull–Rom because its coefficients are one O(n) solve and
+each sample is O(1): per move (median, p95) **1.3 ms** (134 samples), **4.1 ms** (1,015), **4.2 ms** (4,062), **5.4 ms** (10,155; p95 6.1).
+Stage breakdown at 10,000 samples (`editor_bench`, ms): C2 coefficients 0.0012, dense sampling 0.13 (Catmull–Rom 1.1), resampling 0.09,
+analytic curvature 0.12, Menger/frames/boundaries 0.15, surface analysis 8.7, full validation 306, whole regeneration 0.44 (Catmull–Rom 1.5).
+A drag never runs validation, so drag latency does not include surface analysis. The Phase 1C baseline is comparable only for the
+Catmull–Rom rows (same hardware and method).
 
 Before the level-of-detail change the per-move cost was 34.3 ms (10,155 samples), 14.8 ms (4,061) and 28.0 ms (4,000-point
 preset), dominated by repainting. After it, every measured case is below the 16.7 ms frame budget. Validation is not part of a
 drag move and is reported separately; at 10,000 samples it takes ~0.3 s and runs on the worker. Debug builds are much slower.
+
+## Interpolation (Phase 1D)
+
+The *Interpolation* selector in the toolbar chooses how the control points are connected: **Catmull–Rom spline (C1)** (default,
+unchanged), **Cubic spline (C2)** or **Polyline**. It is part of the document (`geometry.interpolation`), saved with it, and each
+change is one undo step that regenerates the geometry and refreshes the diagnostics (an obsolete background validation is never
+adopted). Neither spline is advertised as better: C2 has continuous curvature but can overshoot more (hairpin), natural ends force
+zero curvature at the ends of an open track, and Catmull–Rom is more local. See [curvature-study.md](curvature-study.md).
+Corridor-strip diagnostics are drawn as translucent red quads; boundary diagnostics keep their line overlays.
 
 ## Persistence
 
@@ -122,10 +139,9 @@ documents without resampling.
 ## Known limitations
 
 * The Catmull–Rom centerline is **C1 only**: curvature is discontinuous at control points and noisy near inflections
-  ([curvature-study.md](curvature-study.md)). Nothing in the editor changes this; a C2 centerline is a Phase 2 prerequisite
-  before curvature drives speed limits.
-* A valid report means *no problem found by the implemented checks on the sampled polylines* ([validation.md](validation.md)):
-  no area-overlap test, no drivability statement.
+  ([curvature-study.md](curvature-study.md)). The C2 option removes the jump; Phase 2 still has to decide which centerline feeds curvature.
+* A valid report means *no problem found by the implemented checks on the sampled polylines and corridor strips*
+  ([validation.md](validation.md)); it is not a statement about the continuous surface or about drivability.
 * Width interpolation is linear in arc length between control points; there are no width handles on the track itself.
 * Undo history is per document and is cleared when a document is replaced (New / Open / preset); it is not persisted.
 * Only one validation runs at a time; an obsolete running job cannot be interrupted and is waited for at shutdown (≤ one validation).
