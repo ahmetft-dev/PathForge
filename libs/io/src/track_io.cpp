@@ -4,6 +4,7 @@
 #include <pathforge/io/track_io.hpp>
 #include <set>
 #include <sstream>
+#include <string_view>
 #include <system_error>
 
 namespace pathforge::io {
@@ -61,9 +62,13 @@ void warnUnknown(const ordered_json& obj, const std::set<std::string>& known, co
   }
 }
 
-const ordered_json& require(const ordered_json& obj, const char* key, const std::string& where) {
+// Returns a reference into `obj`. `where` is a string_view so that no temporary std::string is bound to a
+// reference parameter of a function that returns a reference (GCC -Wdangling-reference).
+const ordered_json& require(const ordered_json& obj, const char* key, std::string_view where) {
   const auto it = obj.find(key);
-  if (it == obj.end()) throw ParseError{"missing required field '" + std::string(key) + "' in " + where};
+  if (it == obj.end()) {
+    throw ParseError{"missing required field '" + std::string(key) + "' in " + std::string(where)};
+  }
   return *it;
 }
 
