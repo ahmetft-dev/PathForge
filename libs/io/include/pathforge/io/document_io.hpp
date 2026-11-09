@@ -31,7 +31,10 @@ struct DocumentLoadResult {
   int schemaVersion = 0;
   std::optional<editor::TrackDocument> document;
   std::optional<geometry::TrackData> legacyData;
-  std::vector<std::string> warnings;
+  std::vector<std::string> warnings;  ///< problems with the file itself (unknown fields, ...)
+  /// Informational: how a legacy file was interpreted for editing (imported as a polyline document, or why it
+  /// cannot be edited). Kept apart from `warnings` so that non-editing consumers (the CLI) can ignore it.
+  std::vector<std::string> notes;
   std::string error;  ///< non-empty iff !ok()
   bool ok() const { return document.has_value() || legacyData.has_value(); }
 };

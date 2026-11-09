@@ -138,9 +138,11 @@ TEST(DocumentJson, LegacyV1TracksImportWithoutChangingGeometry) {
     EXPECT_EQ(g.data.rightWidths, r.legacyData->rightWidths) << f;
     EXPECT_EQ(g.data.closure, r.legacyData->closure) << f;
     EXPECT_EQ(validateTrackData(g.data).status(), validateTrackData(*r.legacyData).status()) << f;
-    bool warned = false;
-    for (const auto& w : r.warnings) warned = warned || w.find("polyline document") != std::string::npos;
-    EXPECT_TRUE(warned) << f;
+    bool noted = false;
+    for (const auto& n : r.notes) noted = noted || n.find("polyline document") != std::string::npos;
+    EXPECT_TRUE(noted) << f;
+    // The import note is informational: it is not a warning about the file itself.
+    for (const auto& w : r.warnings) EXPECT_EQ(w.find("polyline document"), std::string::npos) << f;
   }
 }
 
@@ -154,9 +156,9 @@ TEST(DocumentJson, LegacyTracksThatCannotBeEditedStillLoadAsData) {
   ASSERT_TRUE(r.ok()) << r.error;
   EXPECT_TRUE(r.legacyData.has_value());
   EXPECT_FALSE(r.document.has_value());
-  bool warned = false;
-  for (const auto& w : r.warnings) warned = warned || w.find("cannot be edited") != std::string::npos;
-  EXPECT_TRUE(warned);
+  bool noted = false;
+  for (const auto& n : r.notes) noted = noted || n.find("cannot be edited") != std::string::npos;
+  EXPECT_TRUE(noted);
 }
 
 TEST(DocumentJson, InvalidButRepairableDocumentsLoad) {

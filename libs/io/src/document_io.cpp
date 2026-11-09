@@ -101,11 +101,11 @@ DocumentLoadResult parseTrackDocumentJson(std::string_view text) {
       r.legacyData = detail::readTrackV1(doc, r.warnings);
       try {
         r.document = documentFromTrackData(*r.legacyData);
-        r.warnings.push_back(
+        r.notes.push_back(
             "schema v1 (sampled) track imported as a polyline document without resampling; "
             "saving writes schema v2");
       } catch (const EditError& e) {
-        r.warnings.push_back(std::string("schema v1 track cannot be edited: ") + e.what());
+        r.notes.push_back(std::string("schema v1 track cannot be edited: ") + e.what());
       }
     } else {
       throw ParseError{"unsupported schemaVersion " + std::to_string(v) +

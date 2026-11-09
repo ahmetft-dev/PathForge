@@ -551,7 +551,7 @@ QString MainWindow::openTrackFile(const QString& path) {
   if (!r.ok()) return QString::fromStdString(r.error);
   if (!r.document) {
     QString why;
-    for (const auto& w : r.warnings) why += QString::fromStdString(w) + "\n";
+    for (const auto& n : r.notes) why += QString::fromStdString(n) + "\n";
     return "The track cannot be edited:\n" + why;
   }
   // A legacy (v1) file is imported; it keeps no file path so that Save cannot silently convert it in place.
