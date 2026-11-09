@@ -158,10 +158,14 @@ TEST(TrackJson, ReportsMissingRequiredFieldsByName) {
 
 TEST(TrackJson, RejectsUnsupportedSchemaVersionsWithActionableMessage) {
   const std::string base = serializeTrackJson(sample()).text;
+  const LoadResult v3 = parseTrackJson(replaceOnce(base, "\"schemaVersion\": 1", "\"schemaVersion\": 3"));
+  ASSERT_FALSE(v3.ok());
+  EXPECT_NE(v3.error.find("unsupported schemaVersion 3"), std::string::npos);
+  EXPECT_NE(v3.error.find("upgrade"), std::string::npos);
+  // Version 2 exists but is an editable document: the sampled-track reader points to the right API.
   const LoadResult v2 = parseTrackJson(replaceOnce(base, "\"schemaVersion\": 1", "\"schemaVersion\": 2"));
   ASSERT_FALSE(v2.ok());
-  EXPECT_NE(v2.error.find("unsupported schemaVersion 2"), std::string::npos);
-  EXPECT_NE(v2.error.find("upgrade"), std::string::npos);
+  EXPECT_NE(v2.error.find("editable track document"), std::string::npos);
   EXPECT_FALSE(parseTrackJson(replaceOnce(base, "\"schemaVersion\": 1", "\"schemaVersion\": 0")).ok());
   EXPECT_FALSE(parseTrackJson(replaceOnce(base, "\"schemaVersion\": 1", "\"schemaVersion\": \"1\"")).ok());
   EXPECT_FALSE(parseTrackJson(replaceOnce(base, "\"schemaVersion\": 1", "\"schemaVersion\": 1.5")).ok());
@@ -336,7 +340,7 @@ TEST(TrackFile, LoadFailuresAreReportedAndHarmless) {
 
 TEST(TrackFile, FixturesBehaveAsDocumented) {
   EXPECT_TRUE(loadTrackFile(dataFile("valid_oval.json")).ok());
-  EXPECT_NE(loadTrackFile(dataFile("wrong_version.json")).error.find("unsupported schemaVersion 2"),
+  EXPECT_NE(loadTrackFile(dataFile("wrong_version.json")).error.find("unsupported schemaVersion 3"),
             std::string::npos);
   EXPECT_FALSE(loadTrackFile(dataFile("malformed.json")).ok());
   const LoadResult extra = loadTrackFile(dataFile("unknown_field.json"));

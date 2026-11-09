@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "name": "Future",
   "units": "SI",
   "coordinateSystem": "xy-right-handed",

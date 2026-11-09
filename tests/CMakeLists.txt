@@ -35,7 +35,7 @@ target_link_libraries(pathforge_editor_tests PRIVATE pathforge::editor pathforge
 gtest_discover_tests(pathforge_editor_tests)
 
 # ---- I/O library tests
-add_executable(pathforge_io_tests io_test.cpp)
+add_executable(pathforge_io_tests io_test.cpp document_io_test.cpp)
 target_link_libraries(pathforge_io_tests PRIVATE pathforge::io pathforge_warnings GTest::gtest_main)
 target_compile_definitions(pathforge_io_tests PRIVATE PATHFORGE_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 gtest_discover_tests(pathforge_io_tests)
@@ -53,7 +53,7 @@ if(TARGET pathforge-cli)
   pathforge_cli_test(validate_self_intersecting 1 "CenterlineSelfIntersection" track validate ${PF_DATA}/bowtie.json)
   pathforge_cli_test(validate_duplicate_points 1 "DegenerateSegment" track validate ${PF_DATA}/duplicate_points.json)
   pathforge_cli_test(validate_malformed 3 "malformed JSON" track validate ${PF_DATA}/malformed.json)
-  pathforge_cli_test(validate_wrong_version 3 "unsupported schemaVersion 2" track validate ${PF_DATA}/wrong_version.json)
+  pathforge_cli_test(validate_wrong_version 3 "unsupported schemaVersion 3" track validate ${PF_DATA}/wrong_version.json)
   pathforge_cli_test(validate_missing_file 3 "file not found" track validate ${PF_DATA}/does_not_exist.json)
   pathforge_cli_test(validate_usage 2 "usage" track validate)
   pathforge_cli_test(inspect_valid 0 "name +: oval" track inspect ${PF_DATA}/valid_oval.json)

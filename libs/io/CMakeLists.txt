@@ -12,10 +12,14 @@ if(NOT nlohmann_json_FOUND)
   FetchContent_MakeAvailable(nlohmann_json)
 endif()
 
-add_library(pathforge_io STATIC src/track_io.cpp)
+add_library(pathforge_io STATIC
+  src/json_support.cpp
+  src/track_io.cpp
+  src/document_io.cpp
+)
 add_library(pathforge::io ALIAS pathforge_io)
 target_include_directories(pathforge_io PUBLIC include)
 target_compile_features(pathforge_io PUBLIC cxx_std_20)
 target_link_libraries(pathforge_io
-  PUBLIC pathforge::geometry
+  PUBLIC pathforge::geometry pathforge::editor
   PRIVATE nlohmann_json::nlohmann_json pathforge_warnings)
