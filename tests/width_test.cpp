@@ -74,6 +74,32 @@ TEST(WidthProfile, RejectsInvalidKnots) {
   EXPECT_THROW(sampleWidthProfile(closed, {{closed.length(), 1.0}}), GeometryError);  // s == L is the seam
 }
 
+// evaluateWidthProfile is the general form of sampleWidthProfile: evaluated at the path's own arc lengths it
+// must return bit-identical values, and in between vertices it interpolates linearly (exact rationals here).
+TEST(WidthProfile, EvaluateAtArbitraryPositionsMatchesSampling) {
+  const Path c = makeCircle(10.0, 8);
+  const double L = c.length();
+  const std::vector<WidthKnot> knots{{0.25 * L, 2.0}, {0.75 * L, 6.0}};
+  EXPECT_EQ(evaluateWidthProfile(knots, L, Closure::Closed, c.arcLengths()), sampleWidthProfile(c, knots));
+  const auto w = evaluateWidthProfile(knots, L, Closure::Closed, {0.0, 0.25 * L, 0.5 * L, 0.875 * L});
+  EXPECT_NEAR(w[0], 4.0, 1e-12);  // through the seam
+  EXPECT_NEAR(w[1], 2.0, 1e-12);
+  EXPECT_NEAR(w[2], 4.0, 1e-12);
+  EXPECT_NEAR(w[3], 5.0, 1e-12);
+  const auto open = evaluateWidthProfile({{0.0, 1.0}, {10.0, 3.0}}, 10.0, Closure::Open, {0.0, 2.5, 10.0});
+  EXPECT_NEAR(open[1], 1.5, 1e-12);
+  EXPECT_NEAR(open[2], 3.0, 1e-12);
+}
+
+TEST(WidthProfile, EvaluateRejectsInvalidPositions) {
+  const std::vector<WidthKnot> k{{0.0, 1.0}};
+  EXPECT_THROW(evaluateWidthProfile(k, 10.0, Closure::Open, {2.0, 1.0}), GeometryError);  // decreasing
+  EXPECT_THROW(evaluateWidthProfile(k, 10.0, Closure::Open, {11.0}), GeometryError);      // beyond the path
+  EXPECT_THROW(evaluateWidthProfile(k, 10.0, Closure::Closed, {10.0}), GeometryError);    // seam itself
+  EXPECT_THROW(evaluateWidthProfile(k, 0.0, Closure::Open, {0.0}), GeometryError);        // zero length
+  EXPECT_NO_THROW(evaluateWidthProfile(k, 10.0, Closure::Open, {}));
+}
+
 TEST(VariableWidthTrack, PerVertexWidthsOffsetEachVertexIndividually) {
   const double r = 100.0;
   const std::size_t n = 360;

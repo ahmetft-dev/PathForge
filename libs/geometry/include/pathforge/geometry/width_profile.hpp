@@ -26,4 +26,12 @@ struct WidthKnot {
 /// @throws GeometryError for empty/unsorted/non-finite knots, negative widths, or s out of range.
 std::vector<double> sampleWidthProfile(const Path& path, const std::vector<WidthKnot>& knots);
 
+/// Evaluates the same piecewise-linear profile at arbitrary arc-length positions on a path of total length
+/// `length` with the given closure (same knot rules and interpolation as sampleWidthProfile(), which is
+/// implemented with this function). `positions` must be finite, non-decreasing and within [0, length]
+/// ([0, length) for closed paths, where length itself is the seam). Runs in O(positions + knots).
+/// @throws GeometryError for invalid knots or positions.
+std::vector<double> evaluateWidthProfile(const std::vector<WidthKnot>& knots, double length, Closure closure,
+                                         const std::vector<double>& positions);
+
 }  // namespace pathforge::geometry
