@@ -7,7 +7,7 @@ PathForge is an experimental, cross-platform engineering application being devel
 Rather than becoming a racing game, PathForge is intended to be a workspace for **experimentation, visualization, and engineering analysis**. The project starts with motorsport applications and may later expand into robotics and autonomous racing.
 
 > [!IMPORTANT]
-> **Project status: pre-alpha.** Implemented so far: a Qt-free geometry library (paths, arc length, curvature, synthetic circle), a CLI, a Qt 6 Studio viewport and unit tests. Everything else described below is a development goal, not an implemented capability. There is no release or performance data yet.
+> **Project status: pre-alpha.** Implemented so far: a Qt-free geometry library (paths, Catmull–Rom splines, arc-length resampling, tangents/normals/curvature, constant-width track boundaries, circle / oval / S-curve presets), a CLI, a Qt 6 Studio viewport and unit tests. See [docs/geometry.md](docs/geometry.md) for methods and limitations. Everything else described below is a development goal, not an implemented capability. There is no release or performance data yet.
 
 ## Why PathForge?
 
@@ -128,7 +128,7 @@ A numerical solver will be selected when its requirements are clear; one will no
 ## Roadmap
 
 - [x] **Phase 0 — Foundation:** CMake project, Qt shell, test harness, CI configuration, coding conventions (CI results unverified until first run on GitHub).
-- [ ] **Phase 1 — Track geometry** *(started: paths, arc length, curvature, circle, viewport)*: Centerlines, boundaries, splines, curvature, 2D visualization, serialization.
+- [ ] **Phase 1 — Track geometry** *(implemented: spline, resampling, curvature, constant-width boundaries, 3 presets, viewport; NOT yet: validation engine, track editor, JSON I/O)*: Centerlines, boundaries, splines, curvature, 2D visualization, serialization.
 - [ ] **Phase 2 — First lap simulation (`v0.1` goal):** Point-mass model, speed profile, braking constraints, estimated lap time, headless execution.
 - [ ] **Phase 3 — Racing-line optimization:** Shortest path, minimum curvature, physical/geometric comparison.
 - [ ] **Phase 4 — Experiments and telemetry:** Parameter sweeps, plots, export, regression and performance benchmarks.
@@ -146,6 +146,8 @@ cmake --preset default
 cmake --build --preset default
 ctest --preset default
 ./build/release/apps/pathforge-cli/pathforge-cli circle --radius 100 --points 360
+./build/release/apps/pathforge-cli/pathforge-cli oval --length 300 --width 120 --points 512
+./build/release/apps/pathforge-cli/pathforge-cli scurve --points 256
 ```
 
 PathForge Studio is built automatically when Qt 6 is found. See [docs/building.md](docs/building.md) for options,

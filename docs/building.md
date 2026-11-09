@@ -20,6 +20,8 @@ On macOS with Homebrew Qt you may need `-DCMAKE_PREFIX_PATH=$(brew --prefix qt)`
 
 ```bash
 ./build/release/apps/pathforge-cli/pathforge-cli circle --radius 100 --points 360
+./build/release/apps/pathforge-cli/pathforge-cli oval --length 300 --width 120 --points 512 --track-width 10
+./build/release/apps/pathforge-cli/pathforge-cli scurve --length 300 --amplitude 30 --points 256
 ./build/release/apps/pathforge-studio/pathforge-studio.app/Contents/MacOS/pathforge-studio   # macOS
 ./build/release/apps/pathforge-studio/pathforge-studio                                       # Linux/Windows
 ```

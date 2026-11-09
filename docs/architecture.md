@@ -7,11 +7,13 @@ pathforge-cli                   ─┘
 ```
 
 - **`libs/geometry`** – `Vec2`, validated immutable `Path` (open or closed), arc length, discrete curvature,
-  `computeStats`, synthetic circle generator. Namespace `pathforge::geometry`, public headers under
+  `computeStats`, Catmull–Rom splines, arc-length resampling, tangent/normal frames, `Track` (centerline,
+  widths, boundaries, local diagnostics) and the circle / rounded-rectangle (oval) / S-curve generators. See
+  [geometry.md](geometry.md). Namespace `pathforge::geometry`, public headers under
   `libs/geometry/include/pathforge/geometry/`.
 - **`apps/pathforge-cli`** – headless front-end; proves the engine is usable without Qt.
 - **`apps/pathforge-studio`** – Qt viewport and panels. It draws points produced by the library and shows
-  `PathStats`; it performs no geometry calculations of its own.
+  `PathStats`; it performs no geometry calculations of its own (presets, boundaries and statistics all come from the library).
 - **`tests/`** – GoogleTest, registered with CTest per test case.
 
 ## Decisions
