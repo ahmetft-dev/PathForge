@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "name": "Work in progress",
+  "units": "SI",
+  "coordinateSystem": "xy-right-handed",
+  "closed": false,
+  "geometry": {
+    "interpolation": "catmull-rom",
+    "alpha": 0.5,
+    "resampleSpacing": 2.0
+  },
+  "controlPoints": [
+    {
+      "x": 10,
+      "y": 20,
+      "leftWidth": 5,
+      "rightWidth": 5
+    }
+  ]
+}

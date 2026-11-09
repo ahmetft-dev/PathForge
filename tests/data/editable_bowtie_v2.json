@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 2,
+  "name": "Editable bowtie",
+  "units": "SI",
+  "coordinateSystem": "xy-right-handed",
+  "closed": true,
+  "geometry": {
+    "interpolation": "polyline",
+    "alpha": 0.5,
+    "resampleSpacing": 0.0
+  },
+  "controlPoints": [
+    {
+      "x": 0,
+      "y": 0,
+      "leftWidth": 1,
+      "rightWidth": 1
+    },
+    {
+      "x": 200,
+      "y": 200,
+      "leftWidth": 1,
+      "rightWidth": 1
+    },
+    {
+      "x": 200,
+      "y": 0,
+      "leftWidth": 1,
+      "rightWidth": 1
+    },
+    {
+      "x": 0,
+      "y": 200,
+      "leftWidth": 1,
+      "rightWidth": 1
+    }
+  ]
+}

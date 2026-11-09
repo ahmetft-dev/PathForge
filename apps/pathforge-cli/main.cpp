@@ -5,11 +5,13 @@
 #include <cstdlib>
 #include <map>
 #include <optional>
+#include <pathforge/editor/derived_geometry.hpp>
 #include <pathforge/geometry/circle.hpp>
 #include <pathforge/geometry/frames.hpp>
 #include <pathforge/geometry/shapes.hpp>
 #include <pathforge/geometry/track.hpp>
 #include <pathforge/geometry/validation.hpp>
+#include <pathforge/io/document_io.hpp>
 #include <pathforge/io/track_io.hpp>
 #include <string>
 
@@ -27,7 +29,7 @@ void printHelp(std::FILE* out) {
       "  pathforge-cli circle [--radius <m>] [--points <n>] [--track-width <m>] [export]\n"
       "  pathforge-cli oval   [--length <m>] [--width <m>] [--points <n>] [--track-width <m>] [export]\n"
       "  pathforge-cli scurve [--length <m>] [--amplitude <m>] [--points <n>] [--track-width <m>] [export]\n"
-      "  pathforge-cli track validate <file.json>\n"
+      "  pathforge-cli track validate <file.json>      (schema v1 sampled tracks or v2 editable documents)\n"
       "  pathforge-cli track inspect  <file.json>\n"
       "  pathforge-cli --help\n"
       "\n"
@@ -46,7 +48,9 @@ void printHelp(std::FILE* out) {
       "Export (synthetic tracks): --output <file.json> writes the track (schema v1);\n"
       "  --name <text> sets the track name; --force allows overwriting an existing file.\n"
       "\n"
-      "track validate: loads a track file and runs the geometric validation; prints the issues.\n"
+      "track validate: loads a track file and runs the geometric validation; prints the issues. Editable "
+      "(v2)\n"
+      "                documents are validated on their derived (interpolated, resampled) geometry.\n"
       "track inspect:  prints metadata, statistics, clearance metrics and validation results.\n"
       "\n"
       "Exit codes: 0 success / track valid, 1 track invalid (or not fully checked),\n"
@@ -272,24 +276,48 @@ std::string widthStats(const std::vector<double>& w) {
   return buf;
 }
 
-io::LoadResult loadOrThrow(const std::string& file) {
-  io::LoadResult r = io::loadTrackFile(file);
+io::DocumentLoadResult loadOrThrow(const std::string& file) {
+  io::DocumentLoadResult r = io::loadTrackDocumentFile(file);
   if (!r.ok()) throw FileError{file + ": " + r.error};
   for (const std::string& w : r.warnings) std::fprintf(stderr, "warning: %s: %s\n", file.c_str(), w.c_str());
   return r;
+}
+
+const char* interpolationName(pathforge::editor::Interpolation i) {
+  return i == pathforge::editor::Interpolation::CatmullRom ? "catmull-rom" : "polyline";
 }
 
 int runTrack(int argc, char** argv) {
   if (argc != 4) throw UsageError{"usage: pathforge-cli track <validate|inspect> <file.json>"};
   const std::string sub = argv[2];
   if (sub != "validate" && sub != "inspect") throw UsageError{"unknown track command '" + sub + "'"};
-  const io::LoadResult loaded = loadOrThrow(argv[3]);
-  const geometry::TrackData& d = *loaded.data;
+  const io::DocumentLoadResult loaded = loadOrThrow(argv[3]);
+  // Schema v1: the stored samples are validated as-is (unchanged behaviour). Schema v2: the editable document
+  // is turned into derived geometry first; validation always runs on sampled data.
+  std::optional<pathforge::editor::DerivedGeometry> derived;
+  if (!loaded.legacyData) derived = pathforge::editor::generateGeometry(*loaded.document);
+  const geometry::TrackData& d = loaded.legacyData ? *loaded.legacyData : derived->data;
   const geometry::ValidationReport v = geometry::validateTrackData(d);
 
   if (sub == "inspect") {
     std::printf("PathForge track file: %s\n", argv[3]);
     std::printf("  name                       : %s\n", d.name.c_str());
+    std::printf("  schema version             : %d%s\n", loaded.schemaVersion,
+                loaded.schemaVersion == 1 ? " (sampled track)" : " (editable document)");
+    if (derived) {
+      const auto& doc = *loaded.document;
+      std::printf("  control points             : %zu\n", doc.size());
+      std::printf("  interpolation              : %s (alpha %.3g)\n",
+                  interpolationName(doc.settings().interpolation), doc.settings().alpha);
+      if (doc.settings().resampleSpacing > 0.0) {
+        std::printf("  resample spacing           : %.6g m\n", doc.settings().resampleSpacing);
+      } else {
+        std::printf("  resample spacing           : off\n");
+      }
+      if (derived->status != pathforge::editor::DerivedStatus::Ok) {
+        std::printf("  derived geometry           : not generated (%s)\n", derived->message.c_str());
+      }
+    }
     std::printf("  closed                     : %s\n",
                 d.closure == Closure::Closed ? "yes" : "no (open path)");
     std::printf("  points                     : %zu\n", d.centerline.size());

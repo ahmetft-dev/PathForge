@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 2,
+  "name": "Editable circuit",
+  "units": "SI",
+  "coordinateSystem": "xy-right-handed",
+  "closed": true,
+  "geometry": {
+    "interpolation": "catmull-rom",
+    "alpha": 0.5,
+    "resampleSpacing": 2.0
+  },
+  "controlPoints": [
+    {
+      "x": 100.0,
+      "y": 0.0,
+      "leftWidth": 5.0,
+      "rightWidth": 5.0
+    },
+    {
+      "x": 70.710678,
+      "y": 70.710678,
+      "leftWidth": 5.0,
+      "rightWidth": 5.0
+    },
+    {
+      "x": 0.0,
+      "y": 100.0,
+      "leftWidth": 5.0,
+      "rightWidth": 5.0
+    },
+    {
+      "x": -70.710678,
+      "y": 70.710678,
+      "leftWidth": 5.0,
+      "rightWidth": 5.0
+    },
+    {
+      "x": -100.0,
+      "y": 0.0,
+      "leftWidth": 5.0,
+      "rightWidth": 5.0
+    },
+    {
+      "x": -70.710678,
+      "y": -70.710678,
+      "leftWidth": 5.0,
+      "rightWidth": 5.0
+    },
+    {
+      "x": -0.0,
+      "y": -100.0,
+      "leftWidth": 5.0,
+      "rightWidth": 5.0
+    },
+    {
+      "x": 70.710678,
+      "y": -70.710678,
+      "leftWidth": 5.0,
+      "rightWidth": 5.0
+    }
+  ]
+}
