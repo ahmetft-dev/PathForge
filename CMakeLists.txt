@@ -15,6 +15,7 @@ option(PATHFORGE_BUILD_CLI "Build pathforge-cli" ON)
 # AUTO: build Studio only if Qt 6 is found. ON: require Qt. OFF: skip.
 set(PATHFORGE_BUILD_STUDIO AUTO CACHE STRING "Build PathForge Studio (AUTO, ON, OFF)")
 set_property(CACHE PATHFORGE_BUILD_STUDIO PROPERTY STRINGS AUTO ON OFF)
+option(PATHFORGE_BUILD_BENCHMARKS "Build benchmark / study programs (not run by CTest)" OFF)
 option(PATHFORGE_WARNINGS_AS_ERRORS "Treat warnings as errors" OFF)
 
 # Warning flags are applied per target through this interface library.
@@ -34,6 +35,10 @@ endif()
 
 add_subdirectory(libs/geometry)
 add_subdirectory(libs/io)
+
+if(PATHFORGE_BUILD_BENCHMARKS)
+  add_subdirectory(benchmarks)
+endif()
 
 if(PATHFORGE_BUILD_CLI)
   add_subdirectory(apps/pathforge-cli)
