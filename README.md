@@ -137,7 +137,7 @@ A numerical solver will be selected when its requirements are clear; one will no
 
 - [x] **Phase 0 — Foundation:** CMake project, Qt shell, test harness, CI configuration, coding conventions (CI results unverified until first run on GitHub).
 - [x] **Phase 1A — Advanced track geometry:** splines, arc-length resampling, tangents/normals/curvature, boundaries, circle/oval/S-curve presets (all six GitHub Actions jobs passed on `84f9a09`).
-- [ ] **Phase 1B — Track validation & persistence** *(implemented and tested locally; not yet verified on GitHub Actions)*: global validation, clearance metrics, variable widths, JSON schema v1, file I/O, CLI and Studio integration, curvature study. **Not yet:** interactive track editor (Phase 1C), area-overlap detection, C2 splines.
+- [x] **Phase 1B — Track validation & persistence:** global validation, clearance metrics, variable widths, JSON schema v1, file I/O, CLI and Studio integration, curvature study (all six GitHub Actions jobs passed on `b676669`: [run 42678312235](https://github.com/ahmetft-dev/PathForge/actions/runs/42678312235)). **Not yet:** interactive track editor (Phase 1C), area-overlap detection, C2 splines.
 - [ ] **Phase 2 — First lap simulation (`v0.1` goal):** Point-mass model, speed profile, braking constraints, estimated lap time, headless execution.
 - [ ] **Phase 3 — Racing-line optimization:** Shortest path, minimum curvature, physical/geometric comparison.
 - [ ] **Phase 4 — Experiments and telemetry:** Parameter sweeps, plots, export, regression and performance benchmarks.

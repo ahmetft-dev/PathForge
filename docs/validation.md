@@ -78,3 +78,22 @@ Time per N² is ≈ 3 ns for N ≥ 4000 (quadratic scaling confirmed between 4,0
 for well-behaved tracks where bounding boxes reject most pairs; tracks with very many overlapping segment boxes
 (dense spirals, extremely long thin features) were not measured and may be slower. Other machines and compilers were
 not measured.
+
+## Implications for live editing (Phase 1C planning)
+
+The public validation APIs (`validateTrackData`, `validateTrack`, `ValidationOptions`, `ValidationReport`) are stable
+and are meant to be reused by an interactive editor unchanged. What the measurements above imply:
+
+* Validation is a **full recomputation** (no incremental state) and costs ~3 ns·N² on the measured machine:
+  about 3–4 ms at 1,000 points, 46 ms at 4,000, 0.3 s at 10,000. At 4,000 points a revalidation per mouse-move
+  event would cap the editor near 20 updates/s and at 10,000 points near 3/s. These are validation costs only.
+* **Not measured:** the cost of regenerating the centerline (spline densification, resampling, width
+  evaluation, boundary construction) after a control-point edit, the Studio redraw cost, and any machine other than
+  the one listed. An editor must measure the whole edit-to-screen path before choosing a strategy.
+* Practical consequences: edit **control points** (tens of points) and keep the dense sampling modest; validate
+  after the edit is committed (mouse release), or debounce/ run validation off the GUI thread for large tracks, and
+  keep showing the last result marked stale meanwhile. The geometry core is Qt-free and holds no global state,
+  so a background validation of an immutable copy of `TrackData` is safe.
+* If larger tracks must be validated interactively, the sweeps are the place to optimise (per-segment
+  bounding-box grid or sweep-and-prune restricted to segments near the edited region); this was deliberately not
+  done because it is not needed at the measured sizes.
