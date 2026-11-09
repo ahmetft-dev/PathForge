@@ -87,6 +87,10 @@ MainWindow::MainWindow() {
   deleteAction_->setShortcuts({QKeySequence::Delete, QKeySequence(Qt::Key_Backspace)});
   connect(deleteAction_, &QAction::triggered, this, &MainWindow::deleteSelected);
 
+  auto* validateAct = new QAction("Validate Now", this);
+  validateAct->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_V));
+  connect(validateAct, &QAction::triggered, session_, &EditorSession::requestValidation);
+
   auto* fit = new QAction("Fit to View", this);
   fit->setShortcut(QKeySequence(Qt::Key_F));
   connect(fit, &QAction::triggered, viewport_, &TrackViewport::fitToView);
@@ -115,6 +119,8 @@ MainWindow::MainWindow() {
   edit->addAction(addPointsAction_);
   edit->addAction(closedAction_);
   edit->addAction(deleteAction_);
+  edit->addSeparator();
+  edit->addAction(validateAct);
   auto* view = menuBar()->addMenu("&View");
   view->addAction(fit);
   view->addAction(zin);
@@ -356,7 +362,7 @@ void MainWindow::refreshViewport() {
   // The viewport content is a pure function of (derived geometry, selection, whether a current report exists
   // and which one). Skip the (comparatively expensive) scene rebuild when nothing it shows has changed.
   const ViewKey key{session_->generation(), session_->selection().value_or(0),
-                    session_->isReportCurrent() ? session_->document().revision() : 0};
+                    session_->isReportCurrent() ? 1u : 0u};
   if (key == lastView_) return;
   lastView_ = key;
   viewport_->setContent(session_->derived(), session_->document().points(), session_->selection(),
@@ -433,15 +439,27 @@ void MainWindow::onValidationChanged() {
   refreshViewport();
   issueList_->clear();
   if (!session_->isReportCurrent()) {
-    setDiagnostic("Validation", "pending (geometry changed)");
+    // Fast preview: the Track's own O(N) local diagnostics are available immediately; the full (global)
+    // validation runs after the edit completes (or on the worker thread for large tracks).
+    QString text = session_->isDragging() ? "pending - preview while dragging" : "pending - validating...";
+    if (const auto& t = session_->derived().track) {
+      const auto& d = t->diagnostics();
+      text += QString(" (local check: %1)")
+                  .arg(d.anyLocalIssue() ? QString("%1 reversed/overly offset boundary segment(s)")
+                                               .arg(d.leftFlippedSegments + d.rightFlippedSegments +
+                                                    d.leftCurvatureViolations + d.rightCurvatureViolations)
+                                         : QString("no local folds"));
+    }
+    setDiagnostic("Validation", text);
     setDiagnostic("Boundary gap", "–");
     return;
   }
   const pg::ValidationReport& r = session_->report();
-  setDiagnostic("Validation", QString("%1 (%2 error(s), %3 warning(s))")
+  setDiagnostic("Validation", QString("%1 (%2 error(s), %3 warning(s)) - %4 ms")
                                   .arg(pg::toString(r.status()))
                                   .arg(r.errorCount)
-                                  .arg(r.warningCount));
+                                  .arg(r.warningCount)
+                                  .arg(session_->lastValidationMilliseconds(), 0, 'f', 1));
   setDiagnostic("Boundary gap", r.clearance.computed
                                     ? QString("%1 m (min distance between left and right boundary "
                                               "polylines)")

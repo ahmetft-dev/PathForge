@@ -8,6 +8,8 @@ add_library(pathforge_studio_lib STATIC
   MainWindow.h
   TrackViewport.cpp
   TrackViewport.h
+  ValidationRunner.cpp
+  ValidationRunner.h
 )
 target_include_directories(pathforge_studio_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(pathforge_studio_lib
@@ -29,6 +31,11 @@ if(PATHFORGE_BUILD_TESTS)
     target_compile_definitions(pathforge_studio_tests PRIVATE PATHFORGE_TEST_DATA_DIR="${PROJECT_SOURCE_DIR}/tests/data")
     add_test(NAME studio.widgets COMMAND pathforge_studio_tests)
     set_tests_properties(studio.widgets PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(pathforge_studio_async_tests ${PROJECT_SOURCE_DIR}/tests/studio_async_test.cpp)
+    target_link_libraries(pathforge_studio_async_tests PRIVATE pathforge_studio_lib Qt6::Test pathforge_warnings)
+    add_test(NAME studio.async_validation COMMAND pathforge_studio_async_tests)
+    set_tests_properties(studio.async_validation PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
   else()
     message(STATUS "Qt6 Test not found: skipping Studio widget tests")
   endif()

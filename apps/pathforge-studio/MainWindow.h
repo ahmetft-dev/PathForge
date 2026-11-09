@@ -68,7 +68,7 @@ class MainWindow : public QMainWindow {
   void applyDocumentSettingsFromWidgets();
   void updateTitle();
 
-  using ViewKey = std::tuple<std::uint64_t, std::uint64_t, std::uint64_t>;
+  using ViewKey = std::tuple<std::uint64_t, std::uint64_t, unsigned>;
   ViewKey lastView_{~0ull, 0, 0};
   EditorSession* session_ = nullptr;
   TrackViewport* viewport_ = nullptr;

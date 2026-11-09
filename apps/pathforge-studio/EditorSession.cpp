@@ -1,6 +1,7 @@
 #include "EditorSession.h"
 
 #include <QUndoCommand>
+#include <chrono>
 
 namespace pfe = pathforge::editor;
 namespace pg = pathforge::geometry;
@@ -16,9 +17,6 @@ struct UndoAccess {
     return s->mutate(std::forward<Fn>(fn));
   }
   static void select(EditorSession* s, std::optional<pfe::PointId> id) { s->select(id); }
-  static void validate(EditorSession* s) {
-    if (!s->isReportCurrent()) s->validateNow();
-  }
 };
 
 namespace {
@@ -229,7 +227,12 @@ bool dryRun(const pfe::TrackDocument& doc, Fn&& fn, QString* why) {
 
 EditorSession::EditorSession(QObject* parent) : QObject(parent) {
   connect(&undo_, &QUndoStack::cleanChanged, this, [this](bool clean) { emit modifiedChanged(!clean); });
-  regenerate(true);
+  debounce_.setSingleShot(true);
+  connect(&debounce_, &QTimer::timeout, this, [this] {
+    if (!drag_ && !isReportCurrent()) requestAsync();
+  });
+  connect(&runner_, &ValidationRunner::finished, this, &EditorSession::onRunnerFinished);
+  regenerate(Mode::Immediate);
 }
 
 void EditorSession::setDefaultWidths(double left, double right) {
@@ -249,34 +252,86 @@ bool EditorSession::mutate(Fn&& fn) {
     emit editRejected(QString::fromUtf8(e.what()));
     return false;
   }
-  regenerate(/*validate=*/!drag_);
+  regenerate(drag_ ? Mode::Skip : Mode::Auto);
   return true;
 }
 
-// Regenerates derived geometry. With `validate`, the report is recomputed BEFORE the change is announced, so
-// listeners see geometry and its matching report together (one UI refresh per edit). During drags validation
-// is skipped and the report becomes stale.
-void EditorSession::regenerate(bool validate) {
+// Regenerates derived geometry and schedules validation.
+//  Skip      during drags: no validation, the report becomes stale (cheap local diagnostics live in the
+//  Track). Auto      after an edit: small tracks validate synchronously BEFORE the change is announced, so
+//  listeners see
+//            geometry and its matching report together; large tracks go to the worker after a debounce.
+//  Immediate like Auto but without the debounce (new document, end of a drag, explicit request).
+void EditorSession::regenerate(Mode mode) {
   derived_ = pfe::generateGeometry(doc_);
-  ++generation_;
+  ++generation_;  // every previously requested background result is now obsolete
   if (selection_ && !doc_.find(*selection_)) {
     selection_.reset();
     emit selectionChanged();
   }
-  if (validate) {
-    report_ = pg::validateTrackData(derived_.data);
-    reportRevision_ = doc_.revision();
-    hasReport_ = true;
+  const bool sync = mode != Mode::Skip && derived_.data.centerline.size() <= asyncThreshold_;
+  if (sync) {
+    runner_.cancelPending();
+    debounce_.stop();
+    validateNow();  // before announcing the change, so listeners see geometry and report together
   }
   emit geometryChanged();
-  if (validate || !isReportCurrent()) emit validationChanged();
+  if (sync || !isReportCurrent()) emit validationChanged();
+  if (mode != Mode::Skip && !sync) {
+    if (mode == Mode::Immediate) {
+      debounce_.stop();
+      requestAsync();
+    } else {
+      debounce_.start(debounceMs_);
+    }
+  }
 }
 
 void EditorSession::validateNow() {
+  const auto t0 = std::chrono::steady_clock::now();
   report_ = pg::validateTrackData(derived_.data);
-  reportRevision_ = doc_.revision();
+  lastValidationMs_ =
+      std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+  reportGeneration_ = generation_;
+  hasReport_ = true;
+}
+
+void EditorSession::requestAsync() { runner_.request(derived_.data, generation_); }
+
+void EditorSession::onRunnerFinished(quint64 generation, double milliseconds) {
+  // Accept only the result that belongs to the geometry on screen NOW. Anything else (an edit happened
+  // meanwhile, a drag is in progress, the document was replaced) is obsolete and must never be shown as
+  // current.
+  if (generation != generation_ || drag_) {
+    ++discarded_;
+    return;
+  }
+  report_ = runner_.lastReport();
+  lastValidationMs_ = milliseconds;
+  reportGeneration_ = generation;
   hasReport_ = true;
   emit validationChanged();
+}
+
+void EditorSession::requestValidation() {
+  if (isReportCurrent() || drag_) return;
+  debounce_.stop();
+  if (derived_.data.centerline.size() <= asyncThreshold_) {
+    validateNow();
+    emit validationChanged();
+  } else {
+    requestAsync();
+  }
+}
+
+const pg::ValidationReport& EditorSession::validatedReport() {
+  if (!isReportCurrent()) {
+    runner_.cancelPending();
+    debounce_.stop();
+    validateNow();
+    emit validationChanged();
+  }
+  return report_;
 }
 
 void EditorSession::replaceDocument(pfe::TrackDocument document, const QString& filePath) {
@@ -286,8 +341,9 @@ void EditorSession::replaceDocument(pfe::TrackDocument document, const QString& 
   filePath_ = filePath;
   selection_.reset();
   hasReport_ = false;
+  runner_.cancelPending();
   emit selectionChanged();
-  regenerate(true);
+  regenerate(Mode::Immediate);
   undo_.setClean();
   emit documentReplaced();
 }
@@ -425,5 +481,5 @@ void EditorSession::endDrag() {
     undo_.push(
         new MovePointCommand(this, drag.id, drag.start, cp->position));  // ONE command for the whole drag
   }
-  UndoAccess::validate(this);
+  requestValidation();  // the one validation of the whole drag (sync for small tracks, worker for large ones)
 }
