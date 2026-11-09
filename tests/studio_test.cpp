@@ -3,6 +3,7 @@
 // screenshots.
 #include <QAction>
 #include <QApplication>
+#include <QComboBox>
 #include <QDir>
 #include <QDoubleSpinBox>
 #include <QGraphicsLineItem>
@@ -15,6 +16,7 @@
 #include <QtTest>
 #include <functional>
 #include <pathforge/editor/derived_geometry.hpp>
+#include <pathforge/geometry/predicates.hpp>
 #include <pathforge/geometry/validation.hpp>
 #include <pathforge/io/document_io.hpp>
 
@@ -759,6 +761,93 @@ class StudioTest : public QObject {
     }
     QVERIFY(selectedDrawn);
     QCOMPARE(v->pointAt(v->worldToViewport(p.position)), p.id);
+  }
+
+  // ---- Interpolation method (Phase 1D)
+  // -------------------------------------------------------------------------
+
+  static QComboBox* interpolationCombo(MainWindow& w) { return w.findChild<QComboBox*>("interpolation"); }
+
+  void interpolationCanBeSwitchedAndEveryStepIsUndoable() {
+    MainWindow w;
+    w.show();
+    action(w, "New Track")->trigger();
+    EditorSession* s = w.session();
+    for (pg::Vec2 p :
+         {pg::Vec2{0, 0}, pg::Vec2{80, 40}, pg::Vec2{160, -20}, pg::Vec2{240, 30}, pg::Vec2{300, 0}}) {
+      s->appendPoint(p);
+    }
+    QComboBox* combo = interpolationCombo(w);
+    QVERIFY(combo);
+    QCOMPARE(combo->count(), 3);
+    QCOMPARE(s->document().settings().interpolation,
+             pfe::Interpolation::CatmullRom);  // the default is unchanged
+    const auto crGeometry = s->derived().data.centerline;
+    const int n = s->undoStack()->count();
+
+    combo->setCurrentIndex(1);  // Cubic spline (C2)
+    QCOMPARE(s->document().settings().interpolation, pfe::Interpolation::CubicC2);
+    QCOMPARE(s->undoStack()->count(), n + 1);
+    QVERIFY(s->derived().data.centerline != crGeometry);  // the displayed geometry changed ...
+    QVERIFY(s->isReportCurrent());                        // ... and the diagnostics were refreshed for it
+    QCOMPARE(truthStatus(*s), s->report().status());
+    const auto c2Geometry = s->derived().data.centerline;
+
+    combo->setCurrentIndex(2);  // Polyline
+    QCOMPARE(s->document().settings().interpolation, pfe::Interpolation::Polyline);
+    {  // polyline: every derived sample lies ON the control polygon (resampling keeps samples on the
+       // segments)
+      const auto& pts = s->document().points();
+      for (const pg::Vec2& q : s->derived().data.centerline) {
+        double best = 1e300;
+        for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
+          best = std::min(best, pg::pointSegmentDistance(q, pts[i].position, pts[i + 1].position));
+        }
+        QVERIFY(best < 1e-9);
+      }
+    }
+
+    s->undoStack()->undo();  // back to C2: same geometry, combo follows
+    QCOMPARE(s->document().settings().interpolation, pfe::Interpolation::CubicC2);
+    QCOMPARE(combo->currentIndex(), 1);
+    QCOMPARE(s->derived().data.centerline, c2Geometry);
+    s->undoStack()->undo();  // back to Catmull-Rom
+    QCOMPARE(combo->currentIndex(), 0);
+    QCOMPARE(s->derived().data.centerline, crGeometry);
+    s->undoStack()->redo();
+    QCOMPARE(s->document().settings().interpolation, pfe::Interpolation::CubicC2);
+  }
+
+  static pg::ValidationStatus truthStatus(const EditorSession& s) {
+    return pg::validateTrackData(s.derived().data).status();
+  }
+
+  void c2DocumentsSurviveEditsSaveAndReload() {
+    QTemporaryDir dir;
+    MainWindow w;
+    w.show();
+    QVERIFY(w.openTrackFile(dataFile("editable_c2_v2.json")).isEmpty());
+    EditorSession* s = w.session();
+    QCOMPARE(s->document().settings().interpolation, pfe::Interpolation::CubicC2);
+    QCOMPARE(interpolationCombo(w)->currentIndex(), 1);
+    // Edit with the C2 method: move, insert, widths, delete; the track stays valid and editable.
+    s->setPointPosition(s->document().points()[2].id, s->document().points()[2].position + pg::Vec2{5, -4});
+    QVERIFY(s->insertNear(s->derived().data.centerline[40], 3.0).has_value());
+    s->setPointWidths(s->document().points()[1].id, 8.0, 3.0);
+    s->removePoint(s->document().points().back().id);
+    QVERIFY(s->isReportCurrent());
+    QCOMPARE(s->report().status(), pg::ValidationStatus::Valid);
+    const QString out = dir.filePath("c2.json");
+    QVERIFY(w.saveTrackFile(out, false).isEmpty());
+    const auto before = s->derived().data.centerline;
+    const std::size_t points = s->document().size();
+    QVERIFY(w.openTrackFile(dataFile("editable_circuit_v2.json"))
+                .isEmpty());  // replace with a Catmull-Rom document
+    QCOMPARE(interpolationCombo(w)->currentIndex(), 0);
+    QVERIFY(w.openTrackFile(out).isEmpty());
+    QCOMPARE(s->document().settings().interpolation, pfe::Interpolation::CubicC2);
+    QCOMPARE(s->document().size(), points);
+    QCOMPARE(s->derived().data.centerline, before);  // identical geometry after the round trip
   }
 
   void zoomFitAndResizeStillWork() {

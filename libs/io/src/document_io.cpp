@@ -15,6 +15,7 @@ namespace {
 
 constexpr const char* kCatmullRom = "catmull-rom";
 constexpr const char* kPolyline = "polyline";
+constexpr const char* kCubicC2 = "cubic-c2";  // added in Phase 1D; additive within schema v2
 
 TrackDocument readDocumentV2(const ordered_json& doc, std::vector<std::string>& warnings) {
   TrackDocument d;
@@ -31,8 +32,11 @@ TrackDocument readDocumentV2(const ordered_json& doc, std::vector<std::string>& 
     s.interpolation = Interpolation::CatmullRom;
   } else if (kind == kPolyline) {
     s.interpolation = Interpolation::Polyline;
+  } else if (kind == kCubicC2) {
+    s.interpolation = Interpolation::CubicC2;
   } else {
-    throw ParseError{"geometry.interpolation must be \"catmull-rom\" or \"polyline\" (got \"" + kind + "\")"};
+    throw ParseError{"geometry.interpolation must be \"catmull-rom\", \"cubic-c2\" or \"polyline\" (got \"" +
+                     kind + "\"); files using \"cubic-c2\" need PathForge Phase 1D or newer"};
   }
   s.alpha = detail::requireFiniteNumber(detail::require(g, "alpha", "geometry"), "geometry.alpha");
   s.resampleSpacing = detail::requireFiniteNumber(detail::require(g, "resampleSpacing", "geometry"),
@@ -69,6 +73,18 @@ TrackDocument readDocumentV2(const ordered_json& doc, std::vector<std::string>& 
       doc, {"schemaVersion", "name", "units", "coordinateSystem", "closed", "geometry", "controlPoints"},
       "document", warnings);
   return d;
+}
+
+const char* interpolationName(Interpolation i) {
+  switch (i) {
+    case Interpolation::CatmullRom:
+      return kCatmullRom;
+    case Interpolation::Polyline:
+      return kPolyline;
+    case Interpolation::CubicC2:
+      return kCubicC2;
+  }
+  return kCatmullRom;
 }
 
 }  // namespace
@@ -137,10 +153,9 @@ SerializeResult serializeTrackDocumentJson(const TrackDocument& d) {
   ordered_json doc = ordered_json::object();
   detail::writeHeader(doc, kDocumentSchemaVersion, d.name(), d.closure());
   const GeometrySettings& s = d.settings();
-  doc["geometry"] =
-      ordered_json{{"interpolation", s.interpolation == Interpolation::CatmullRom ? kCatmullRom : kPolyline},
-                   {"alpha", s.alpha},
-                   {"resampleSpacing", s.resampleSpacing}};
+  doc["geometry"] = ordered_json{{"interpolation", interpolationName(s.interpolation)},
+                                 {"alpha", s.alpha},
+                                 {"resampleSpacing", s.resampleSpacing}};
   ordered_json pts = ordered_json::array();
   for (const editor::ControlPoint& p : d.points()) {
     pts.push_back(ordered_json{

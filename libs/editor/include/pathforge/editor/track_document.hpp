@@ -31,12 +31,14 @@ struct ControlPoint {
 enum class Interpolation {
   CatmullRom,  ///< centripetal-family Catmull-Rom spline through the control points (C1)
   Polyline,    ///< straight segments between control points (exact, e.g. for imported sampled tracks)
+  CubicC2,     ///< parametric cubic spline, C2 (continuous curvature); natural ends (open) / periodic seam
+               ///< (closed)
 };
 
 /// How derived geometry is generated from the control points.
 struct GeometrySettings {
   Interpolation interpolation = Interpolation::CatmullRom;
-  double alpha = 0.5;  ///< Catmull-Rom knot exponent in [0, 1] (0.5 = centripetal)
+  double alpha = 0.5;  ///< knot exponent in [0, 1] for both spline kinds (0.5 = centripetal, 1 = chordal)
   double resampleSpacing =
       2.0;  ///< [m] equal arc-length resampling; 0 = keep the interpolated vertices as-is
   bool operator==(const GeometrySettings&) const = default;

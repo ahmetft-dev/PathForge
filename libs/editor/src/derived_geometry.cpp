@@ -2,6 +2,7 @@
 #include <cmath>
 #include <limits>
 #include <pathforge/editor/derived_geometry.hpp>
+#include <pathforge/geometry/cubic_spline.hpp>
 #include <pathforge/geometry/predicates.hpp>
 #include <pathforge/geometry/resample.hpp>
 #include <pathforge/geometry/spline.hpp>
@@ -79,7 +80,9 @@ DerivedGeometry generateGeometry(const TrackDocument& d) {
         return fail(d, DerivedStatus::Failed,
                     "too many interpolation samples; increase the resample spacing");
       }
-      dense = geometry::catmullRomSpline(control, d.closure(), {per, s.alpha});
+      dense = s.interpolation == Interpolation::CubicC2
+                  ? geometry::cubicSpline(control, d.closure(), {per, s.alpha})
+                  : geometry::catmullRomSpline(control, d.closure(), {per, s.alpha});
     }
     const double length = dense->length();
     g.controlArcLength.resize(n);

@@ -253,3 +253,64 @@ TEST(DocumentFile, SampledDataConversionChecksArraySizes) {
   bad.rightWidths = {1.0, 1.0};
   EXPECT_THROW(documentFromTrackData(bad), EditError);
 }
+
+// ---- Interpolation method persistence (Phase 1D)
+// ------------------------------------------------------------------
+
+TEST(DocumentJsonInterpolation, EveryMethodRoundTripsWithBitIdenticalDerivedGeometry) {
+  for (Interpolation m : {Interpolation::CatmullRom, Interpolation::CubicC2, Interpolation::Polyline}) {
+    TrackDocument d = sampleDocument();
+    GeometrySettings s = d.settings();
+    s.interpolation = m;
+    d.setSettings(s);
+    const SerializeResult out = serializeTrackDocumentJson(d);
+    ASSERT_TRUE(out.ok());
+    const DocumentLoadResult r = parseTrackDocumentJson(out.text);
+    ASSERT_TRUE(r.ok()) << r.error;
+    EXPECT_EQ(r.document->settings().interpolation, m);
+    EXPECT_EQ(generateGeometry(*r.document).data.centerline, generateGeometry(d).data.centerline);
+    EXPECT_EQ(serializeTrackDocumentJson(*r.document).text,
+              out.text);  // save -> load -> save is byte-identical
+  }
+  const std::string text = serializeTrackDocumentJson([] {
+                             TrackDocument d = sampleDocument();
+                             GeometrySettings s = d.settings();
+                             s.interpolation = Interpolation::CubicC2;
+                             d.setSettings(s);
+                             return d;
+                           }())
+                               .text;
+  EXPECT_NE(text.find("\"interpolation\": \"cubic-c2\""), std::string::npos);
+  EXPECT_NE(text.find("\"schemaVersion\": 2"), std::string::npos);  // additive: still schema v2
+}
+
+// Existing schema-v2 files must keep their meaning: this fixture was written before the C2 option existed.
+// Its method stays Catmull-Rom and its derived geometry is pinned to the values printed by `pathforge-cli
+// track inspect` in Phase 1C (313 samples, length 625.582452892 m): a change here would mean saved projects
+// silently changed shape.
+TEST(DocumentJsonInterpolation, LegacySchemaV2FilesKeepTheirCatmullRomGeometry) {
+  const DocumentLoadResult r = loadTrackDocumentFile(dataFile("editable_circuit_v2.json"));
+  ASSERT_TRUE(r.ok()) << r.error;
+  EXPECT_EQ(r.schemaVersion, 2);
+  EXPECT_EQ(r.document->settings().interpolation, Interpolation::CatmullRom);
+  const DerivedGeometry g = generateGeometry(*r.document);
+  ASSERT_EQ(g.status, DerivedStatus::Ok);
+  EXPECT_EQ(g.data.centerline.size(), 313u);
+  EXPECT_NEAR(g.track->centerline().length(), 625.582452892, 1e-8);
+}
+
+TEST(DocumentJsonInterpolation, C2FixtureLoadsAndValidates) {
+  const DocumentLoadResult r = loadTrackDocumentFile(dataFile("editable_c2_v2.json"));
+  ASSERT_TRUE(r.ok()) << r.error;
+  EXPECT_EQ(r.document->settings().interpolation, Interpolation::CubicC2);
+  EXPECT_EQ(validateTrackData(generateGeometry(*r.document).data).status(), ValidationStatus::Valid);
+}
+
+TEST(DocumentJsonInterpolation, UnknownMethodsAreRejectedWithAnActionableMessage) {
+  const std::string base = serializeTrackDocumentJson(sampleDocument()).text;
+  const DocumentLoadResult r = parseTrackDocumentJson(replaceOnce(base, "\"catmull-rom\"", "\"nurbs\""));
+  ASSERT_FALSE(r.ok());
+  EXPECT_NE(r.error.find("cubic-c2"), std::string::npos);
+  EXPECT_NE(r.error.find("Phase 1D"), std::string::npos);
+  EXPECT_NE(r.error.find("nurbs"), std::string::npos);
+}

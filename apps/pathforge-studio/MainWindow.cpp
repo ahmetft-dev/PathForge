@@ -246,7 +246,14 @@ QWidget* MainWindow::buildSidebar() {
           [this](bool on) { session_->setClosure(on ? pfe::Closure::Closed : pfe::Closure::Open); });
   df->addRow(closedCheck_);
   interpolation_ = new QComboBox;
-  interpolation_->addItems({"Catmull-Rom spline", "Polyline"});
+  interpolation_->setObjectName("interpolation");
+  interpolation_->addItems({"Catmull-Rom spline (C1)", "Cubic spline (C2)", "Polyline"});
+  interpolation_->setToolTip(
+      "How control points are connected. Catmull-Rom: local, continuous tangent, curvature jumps at control "
+      "points.\n"
+      "Cubic C2: global, continuous curvature, natural ends / periodic seam; it can overshoot more than "
+      "Catmull-Rom.\n"
+      "Neither is better in general: compare them on your points (see docs/curvature-study.md).");
   connect(interpolation_, &QComboBox::currentIndexChanged, this,
           [this] { applyDocumentSettingsFromWidgets(); });
   df->addRow("Interpolation", interpolation_);
@@ -379,7 +386,17 @@ void MainWindow::syncDocumentWidgets() {
   if (!nameEdit_->hasFocus()) nameEdit_->setText(QString::fromStdString(d.name()));
   closedCheck_->setChecked(d.closure() == pfe::Closure::Closed);
   closedAction_->setChecked(d.closure() == pfe::Closure::Closed);
-  interpolation_->setCurrentIndex(d.settings().interpolation == pfe::Interpolation::CatmullRom ? 0 : 1);
+  switch (d.settings().interpolation) {
+    case pfe::Interpolation::CatmullRom:
+      interpolation_->setCurrentIndex(0);
+      break;
+    case pfe::Interpolation::CubicC2:
+      interpolation_->setCurrentIndex(1);
+      break;
+    case pfe::Interpolation::Polyline:
+      interpolation_->setCurrentIndex(2);
+      break;
+  }
   spacing_->setValue(d.settings().resampleSpacing);
   deleteAction_->setEnabled(session_->selection().has_value());
   syncPointPanel();
@@ -406,8 +423,9 @@ void MainWindow::syncPointPanel() {
 
 void MainWindow::applyDocumentSettingsFromWidgets() {
   pfe::GeometrySettings s = session_->document().settings();
-  s.interpolation =
-      interpolation_->currentIndex() == 0 ? pfe::Interpolation::CatmullRom : pfe::Interpolation::Polyline;
+  s.interpolation = interpolation_->currentIndex() == 0   ? pfe::Interpolation::CatmullRom
+                    : interpolation_->currentIndex() == 1 ? pfe::Interpolation::CubicC2
+                                                          : pfe::Interpolation::Polyline;
   s.resampleSpacing = spacing_->value() < 1e-3 ? 0.0 : spacing_->value();
   session_->setSettings(s);
 }

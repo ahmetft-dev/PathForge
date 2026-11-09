@@ -246,3 +246,116 @@ TEST(DerivedGeometry, InsertionMapsCurvePositionToControlSegment) {
   one.appendPoint({0, 0}, 1, 1);
   EXPECT_FALSE(findInsertion(one, generateGeometry(one), {1, 1}).has_value());
 }
+
+// ---- C2 cubic spline option
+// ------------------------------------------------------------------------------------
+
+namespace {
+TrackDocument ellipseDoc(Interpolation interp, double spacing, int m = 16) {
+  TrackDocument d;
+  d.setClosure(Closure::Closed);
+  GeometrySettings s;
+  s.interpolation = interp;
+  s.resampleSpacing = spacing;
+  d.setSettings(s);
+  for (int i = 0; i < m; ++i) {
+    const double t = 2 * kPi * i / m;
+    d.appendPoint({150.0 * std::cos(t), 80.0 * std::sin(t)}, 5.0, 5.0);
+  }
+  return d;
+}
+}  // namespace
+
+TEST(DerivedGeometryC2, ClosedC2TrackIsResampledUniformlyWithoutSeamDuplicate) {
+  const DerivedGeometry g = generateGeometry(ellipseDoc(Interpolation::CubicC2, 1.0));
+  ASSERT_EQ(g.status, DerivedStatus::Ok);
+  const auto& c = g.data.centerline;
+  EXPECT_NE(c.front(), c.back());
+  EXPECT_EQ(c.front(), (Vec2{150.0, 0.0}));  // sample 0 is control point 0 exactly
+  double lo = 1e300, hi = 0;
+  for (std::size_t k = 0; k < c.size(); ++k) {
+    const double h = distance(c[k], c[(k + 1) % c.size()]);  // includes the closing segment
+    lo = std::min(lo, h);
+    hi = std::max(hi, h);
+  }
+  EXPECT_NEAR(lo / hi, 1.0, 2e-4);  // spacing equal up to the chord/arc difference
+  EXPECT_NEAR(hi, 1.0, 0.01);
+  // Every sample lies close to the true ellipse: 16 control points, C2 interpolation error is ~1e-4 of the
+  // size.
+  for (const Vec2& p : c) {
+    const double r = std::hypot(p.x / 150.0, p.y / 80.0);
+    EXPECT_NEAR(r, 1.0, 2.5e-3);
+  }
+}
+
+TEST(DerivedGeometryC2, OpenC2TrackKeepsEndPointsAndNaturalEnds) {
+  TrackDocument d;
+  GeometrySettings s;
+  s.interpolation = Interpolation::CubicC2;
+  s.resampleSpacing = 2.0;
+  d.setSettings(s);
+  for (Vec2 p : {Vec2{0, 0}, Vec2{60, 25}, Vec2{120, -10}, Vec2{200, 5}}) d.appendPoint(p, 4, 4);
+  const DerivedGeometry g = generateGeometry(d);
+  ASSERT_EQ(g.status, DerivedStatus::Ok);
+  EXPECT_EQ(g.data.centerline.front(), (Vec2{0, 0}));
+  EXPECT_EQ(g.data.centerline.back(), (Vec2{200, 5}));
+  // Natural end condition: the curve is (nearly) straight at both ends - Menger curvature of the first sample
+  // is tiny compared with the interior (zero curvature at the end points is the boundary condition).
+  const auto k = g.track->frames().curvature;
+  double interior = 0;
+  for (std::size_t i = 2; i + 2 < k.size(); ++i) interior = std::max(interior, std::abs(k[i]));
+  EXPECT_LT(std::abs(k[1]), 0.05 * interior);
+  EXPECT_LT(std::abs(k[k.size() - 2]), 0.05 * interior);
+}
+
+TEST(DerivedGeometryC2, MethodsAreSelectedExplicitlyAndGiveDifferentGeometry) {
+  const DerivedGeometry cr = generateGeometry(ellipseDoc(Interpolation::CatmullRom, 1.0));
+  const DerivedGeometry c2 = generateGeometry(ellipseDoc(Interpolation::CubicC2, 1.0));
+  const DerivedGeometry pl = generateGeometry(ellipseDoc(Interpolation::Polyline, 0.0));
+  ASSERT_EQ(cr.status, DerivedStatus::Ok);
+  ASSERT_EQ(c2.status, DerivedStatus::Ok);
+  EXPECT_NE(cr.data.centerline, c2.data.centerline);
+  EXPECT_EQ(pl.data.centerline.size(), 16u);  // polyline: exactly the control points
+  // Switching the method back restores the earlier geometry bit-for-bit (nothing is cached or mutated).
+  TrackDocument d = ellipseDoc(Interpolation::CatmullRom, 1.0);
+  const auto before = generateGeometry(d).data.centerline;
+  GeometrySettings s = d.settings();
+  s.interpolation = Interpolation::CubicC2;
+  d.setSettings(s);
+  EXPECT_NE(generateGeometry(d).data.centerline, before);
+  s.interpolation = Interpolation::CatmullRom;
+  d.setSettings(s);
+  EXPECT_EQ(generateGeometry(d).data.centerline, before);
+}
+
+TEST(DerivedGeometryC2, IsDeterministicAndHandlesIncompleteAndDegenerateDocuments) {
+  const auto a = generateGeometry(ellipseDoc(Interpolation::CubicC2, 1.5)).data.centerline;
+  EXPECT_EQ(a, generateGeometry(ellipseDoc(Interpolation::CubicC2, 1.5)).data.centerline);
+  TrackDocument d;
+  GeometrySettings s;
+  s.interpolation = Interpolation::CubicC2;
+  d.setSettings(s);
+  d.appendPoint({0, 0}, 5, 5);
+  EXPECT_EQ(generateGeometry(d).status, DerivedStatus::TooFewPoints);
+  d.appendPoint({10, 0}, 5, 5);
+  d.appendPoint({10, 0}, 5, 5);  // coincident neighbour
+  EXPECT_EQ(generateGeometry(d).status, DerivedStatus::Failed);
+  d.setClosure(Closure::Closed);
+  EXPECT_NE(generateGeometry(d).status, DerivedStatus::Ok);
+}
+
+// The point of the C2 option: the DERIVED centerline of a document has no curvature jump at control points.
+// With the same 20 control points on an ellipse, the sampled Menger curvature varies smoothly for C2, while
+// for Catmull-Rom the largest sample-to-sample change in curvature (at a knot) is a clearly visible multiple
+// of the typical one.
+TEST(DerivedGeometryC2, DerivedCurvatureProfileIsSmootherThanCatmullRomOnAnEllipse) {
+  auto maxStep = [](const DerivedGeometry& g) {
+    const auto& k = g.track->frames().curvature;
+    double m = 0;
+    for (std::size_t i = 0; i < k.size(); ++i) m = std::max(m, std::abs(k[i] - k[(i + 1) % k.size()]));
+    return m;
+  };
+  const double cr = maxStep(generateGeometry(ellipseDoc(Interpolation::CatmullRom, 0.25, 20)));
+  const double c2 = maxStep(generateGeometry(ellipseDoc(Interpolation::CubicC2, 0.25, 20)));
+  EXPECT_GT(cr, 3.0 * c2);  // measured with these settings; documents the effect, not a universal ratio
+}

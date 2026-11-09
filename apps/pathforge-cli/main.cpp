@@ -284,7 +284,15 @@ io::DocumentLoadResult loadOrThrow(const std::string& file) {
 }
 
 const char* interpolationName(pathforge::editor::Interpolation i) {
-  return i == pathforge::editor::Interpolation::CatmullRom ? "catmull-rom" : "polyline";
+  switch (i) {
+    case pathforge::editor::Interpolation::CatmullRom:
+      return "catmull-rom (C1)";
+    case pathforge::editor::Interpolation::CubicC2:
+      return "cubic-c2 (C2)";
+    case pathforge::editor::Interpolation::Polyline:
+      return "polyline";
+  }
+  return "?";
 }
 
 int runTrack(int argc, char** argv) {
