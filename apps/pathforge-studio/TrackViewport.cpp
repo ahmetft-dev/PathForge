@@ -4,6 +4,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPolygonF>
 #include <QWheelEvent>
 #include <algorithm>
 #include <cmath>
@@ -116,6 +117,20 @@ void TrackViewport::setContent(const pfe::DerivedGeometry& derived,
       const QColor color =
           issue.severity == pg::Severity::Error ? QColor(0xff, 0x52, 0x52) : QColor(0xff, 0xca, 0x28);
       for (const pg::SegmentRef& ref : issue.segments) {
+        if (ref.polyline == pg::PolylineId::Surface) {
+          // A corridor strip: translucent quad between boundary samples i and i+1.
+          if (!derived.track) continue;
+          const auto& L = derived.track->leftBoundary();
+          const auto& R = derived.track->rightBoundary();
+          const std::size_t i = ref.index, j = (i + 1) % L.size();
+          if (i >= L.size() || (!closed && j == 0)) continue;
+          QPolygonF quad;
+          for (const pg::Vec2 v : {L[i], L[j], R[j], R[i]}) quad << QPointF(v.x, -v.y);
+          QColor fill = color;
+          fill.setAlpha(70);
+          scene_.addPolygon(quad, cosmeticPen(color, 1.5), QBrush(fill))->setZValue(4);
+          continue;
+        }
         const auto* pl = polylineOf(ref.polyline);
         if (!pl || ref.index >= pl->size() || (!closed && ref.index + 1 >= pl->size())) continue;
         const pg::Vec2 a = (*pl)[ref.index], b = (*pl)[(ref.index + 1) % pl->size()];

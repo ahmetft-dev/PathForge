@@ -80,7 +80,7 @@ void mergeSplineHealth(geometry::ValidationReport& report, const SplineHealth& h
     ++report.errorCount;
     report.issues.push_back({type,
                              Severity::Error,
-                             {{geometry::PolylineId::Centerline, segment}},
+                             {},
                              where,
                              text + " (" + std::to_string(count) +
                                  " evaluation point(s); first in control segment " + std::to_string(segment) +

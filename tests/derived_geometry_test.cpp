@@ -401,6 +401,6 @@ TEST(SplineHealth, FindingsBecomeOneErrorPerKindAndInvalidateTheReport) {
   const auto& a = r.issues[r.issues.size() - 2];
   const auto& b = r.issues.back();
   EXPECT_EQ(a.type, TrackIssue::InvalidSplineDerivative);
-  EXPECT_EQ(a.segments.at(0).index, 4u);
+  EXPECT_NE(a.message.find("control segment 4"), std::string::npos);
   EXPECT_EQ(b.type, TrackIssue::CurvatureEvaluationFailure);
 }

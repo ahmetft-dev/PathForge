@@ -818,6 +818,34 @@ class StudioTest : public QObject {
     QCOMPARE(s->document().settings().interpolation, pfe::Interpolation::CubicC2);
   }
 
+  void surfaceStripIssuesAreDrawnAsTranslucentQuadsOverTheCorridor() {
+    MainWindow w;
+    w.show();
+    QVERIFY(w.openTrackFile(dataFile("editable_c2_v2.json")).isEmpty());
+    EditorSession* s = w.session();
+    pg::ValidationReport r;  // synthetic: a clean track never produces a surface issue
+    r.issues.push_back({pg::TrackIssue::SurfaceOverlap,
+                        pg::Severity::Error,
+                        {{pg::PolylineId::Surface, 3}, {pg::PolylineId::Surface, 40}},
+                        pg::Vec2{0, 0},
+                        "synthetic"});
+    r.errorCount = 1;
+    auto polygons = [&] {
+      int n = 0;
+      for (QGraphicsItem* item : w.viewport()->scene()->items())
+        n += dynamic_cast<QGraphicsPolygonItem*>(item) != nullptr;
+      return n;
+    };
+    w.viewport()->setContent(s->derived(), s->document().points(), std::nullopt, nullptr);
+    QCOMPARE(polygons(), 0);  // no report: nothing drawn
+    w.viewport()->setContent(s->derived(), s->document().points(), std::nullopt, &r);
+    QCOMPARE(polygons(), 2);  // one translucent quad per referenced strip
+    // An out-of-range strip index is ignored instead of crashing.
+    r.issues[0].segments = {{pg::PolylineId::Surface, 1'000'000}};
+    w.viewport()->setContent(s->derived(), s->document().points(), std::nullopt, &r);
+    QCOMPARE(polygons(), 0);
+  }
+
   static pg::ValidationStatus truthStatus(const EditorSession& s) {
     return pg::validateTrackData(s.derived().data).status();
   }
