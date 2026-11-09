@@ -1,4 +1,5 @@
 // pathforge-cli: headless front-end for the PathForge computation libraries (no Qt).
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -8,8 +9,12 @@
 #include <pathforge/geometry/frames.hpp>
 #include <pathforge/geometry/shapes.hpp>
 #include <pathforge/geometry/track.hpp>
+#include <pathforge/geometry/validation.hpp>
+#include <pathforge/io/track_io.hpp>
 #include <string>
 
+namespace geometry = pathforge::geometry;
+namespace io = pathforge::io;
 using namespace pathforge::geometry;
 
 namespace {
@@ -19,9 +24,11 @@ void printHelp(std::FILE* out) {
       "PathForge CLI (all lengths in meters)\n"
       "\n"
       "Usage:\n"
-      "  pathforge-cli circle [--radius <m>] [--points <n>] [--track-width <m>]\n"
-      "  pathforge-cli oval   [--length <m>] [--width <m>] [--points <n>] [--track-width <m>]\n"
-      "  pathforge-cli scurve [--length <m>] [--amplitude <m>] [--points <n>] [--track-width <m>]\n"
+      "  pathforge-cli circle [--radius <m>] [--points <n>] [--track-width <m>] [export]\n"
+      "  pathforge-cli oval   [--length <m>] [--width <m>] [--points <n>] [--track-width <m>] [export]\n"
+      "  pathforge-cli scurve [--length <m>] [--amplitude <m>] [--points <n>] [--track-width <m>] [export]\n"
+      "  pathforge-cli track validate <file.json>\n"
+      "  pathforge-cli track inspect  <file.json>\n"
       "  pathforge-cli --help\n"
       "\n"
       "Tracks:\n"
@@ -36,6 +43,14 @@ void printHelp(std::FILE* out) {
       "  --points <n>        Sampled points, integer >= 3 (circle) or >= 8 (oval, scurve)\n"
       "  --track-width <m>   TOTAL track width, split equally left/right of the centerline,\n"
       "                      finite and >= 0 (default 10)\n"
+      "Export (synthetic tracks): --output <file.json> writes the track (schema v1);\n"
+      "  --name <text> sets the track name; --force allows overwriting an existing file.\n"
+      "\n"
+      "track validate: loads a track file and runs the geometric validation; prints the issues.\n"
+      "track inspect:  prints metadata, statistics, clearance metrics and validation results.\n"
+      "\n"
+      "Exit codes: 0 success / track valid, 1 track invalid (or not fully checked),\n"
+      "            2 usage error, 3 file could not be read, parsed or written.\n"
       "Defaults: circle --radius 100 --points 360; oval --length 300 --width 120 --points 512;\n"
       "          scurve --length 300 --amplitude 30 --points 256\n",
       out);
@@ -59,6 +74,11 @@ struct UsageError {
   std::string message;
 };
 
+// File could not be read/parsed/written: exit code 3.
+struct FileError {
+  std::string message;
+};
+
 // Parses "--name value" pairs for the listed option names; anything else is an error.
 std::map<std::string, std::string> parseOptions(int argc, char** argv,
                                                 std::initializer_list<const char*> allowed) {
@@ -68,6 +88,10 @@ std::map<std::string, std::string> parseOptions(int argc, char** argv,
     bool known = false;
     for (const char* name : allowed) known = known || a == name;
     if (!known) throw UsageError{"unknown option '" + a + "'"};
+    if (a == "--force") {  // flag, no value
+      out[a] = "1";
+      continue;
+    }
     if (i + 1 >= argc) throw UsageError{a + " requires a value"};
     out[a] = argv[++i];
   }
@@ -90,6 +114,52 @@ std::size_t getCount(const std::map<std::string, std::string>& o, const char* na
   std::size_t v = 0;
   if (!parseCount(it->second, v)) throw UsageError{std::string(name) + " must be an integer >= 3"};
   return v;
+}
+
+void printIssues(const geometry::ValidationReport& v) {
+  for (const geometry::ValidationIssue& i : v.issues) {
+    std::printf("    [%s] %s: %s\n", geometry::toString(i.severity), geometry::toString(i.type),
+                i.message.c_str());
+  }
+  if (v.suppressed > 0) std::printf("    ... %zu further issue(s) not listed\n", v.suppressed);
+}
+
+void printValidation(const geometry::ValidationReport& v) {
+  const geometry::CheckCoverage& c = v.checked;
+  std::printf("  validation                 : %s (%zu error(s), %zu warning(s))\n",
+              geometry::toString(v.status()), v.errorCount, v.warningCount);
+  std::printf(
+      "  checks run                 : structure %s, centerline %s, boundaries %s, crossings %s, collapse %s, "
+      "folds %s, clearance %s\n",
+      c.structure ? "yes" : "NO", c.centerline ? "yes" : "NO", c.boundaries ? "yes" : "NO",
+      c.crossings ? "yes" : "NO", c.collapse ? "yes" : "NO", c.localFolds ? "yes" : "NO",
+      c.clearance ? "yes" : "NO");
+  if (v.clearance.computed) {
+    std::printf("  configured total width min : %.4f m\n", v.clearance.minConfiguredTotalWidth);
+    std::printf("  same-vertex L/R distance min: %.4f m  (NOT a clearance)\n",
+                v.clearance.minCorrespondingDistance);
+    std::printf(
+        "  boundary polyline distance : %.4f m  (min distance between left and right boundary polylines)\n",
+        v.clearance.minBoundaryDistance);
+  }
+  printIssues(v);
+  std::printf(
+      "  note                       : 'valid' = no problem found by the implemented checks on the sampled\n"
+      "                               polylines; not a proof of validity of the continuous track and not a\n"
+      "                               drivability statement\n");
+}
+
+// Writes the track if --output was given; returns false (and prints) on failure.
+void maybeExport(const std::map<std::string, std::string>& o, const Track& t, const char* defaultName) {
+  const auto out = o.find("--output");
+  if (out == o.end()) return;
+  const auto nm = o.find("--name");
+  const geometry::TrackData d = geometry::toTrackData(t, nm != o.end() ? nm->second : defaultName);
+  const io::SaveResult r = io::saveTrackFile(
+      out->second, d, o.count("--force") ? io::OverwritePolicy::Overwrite : io::OverwritePolicy::Fail);
+  if (!r.ok()) throw FileError{r.error + (o.count("--force") ? "" : " (use --force to overwrite)")};
+  std::printf("  wrote                      : %s (schema v%d)\n", out->second.c_str(),
+              io::kTrackSchemaVersion);
 }
 
 struct Reference {
@@ -136,7 +206,7 @@ void report(const char* type, const std::string& params, const Track& track, con
       d.leftCurvatureViolations, d.rightCurvatureViolations);
   std::printf("  width*curvature max L / R  : %.4f / %.4f  (>= 1 means the offset folds)\n",
               d.maxLeftWidthCurvature, d.maxRightWidthCurvature);
-  std::printf("  note                       : global boundary validity (self-intersection) is not checked\n");
+  printValidation(validateTrack(track));
 }
 
 std::string fmt(const char* f, double a) {
@@ -146,18 +216,21 @@ std::string fmt(const char* f, double a) {
 }
 
 int runCircle(int argc, char** argv) {
-  const auto o = parseOptions(argc, argv, {"--radius", "--points", "--track-width"});
+  const auto o =
+      parseOptions(argc, argv, {"--radius", "--points", "--track-width", "--output", "--name", "--force"});
   const double radius = getDouble(o, "--radius", 100.0, true);
   const std::size_t points = getCount(o, "--points", 360);
   const double width = getDouble(o, "--track-width", 10.0, false);
   const Track t = Track::create(makeCircle(radius, points), width / 2, width / 2);
   report("circle", fmt("radius %.6g m", radius) + ", points " + std::to_string(points), t,
          {circleCircumference(radius), 1.0 / radius});
+  maybeExport(o, t, "circle");
   return 0;
 }
 
 int runOval(int argc, char** argv) {
-  const auto o = parseOptions(argc, argv, {"--length", "--width", "--points", "--track-width"});
+  const auto o = parseOptions(
+      argc, argv, {"--length", "--width", "--points", "--track-width", "--output", "--name", "--force"});
   const double length = getDouble(o, "--length", 300.0, true);
   const double width = getDouble(o, "--width", 120.0, true);
   const std::size_t points = getCount(o, "--points", 512);
@@ -167,11 +240,13 @@ int runOval(int argc, char** argv) {
          fmt("length %.6g m", length) + fmt(", width %.6g m", width) +
              fmt(", corner radius %.6g m", width / 2) + ", points " + std::to_string(points),
          t, {roundedRectanglePerimeter(length, width, width / 2), std::nullopt});
+  maybeExport(o, t, "oval");
   return 0;
 }
 
 int runSCurve(int argc, char** argv) {
-  const auto o = parseOptions(argc, argv, {"--length", "--amplitude", "--points", "--track-width"});
+  const auto o = parseOptions(
+      argc, argv, {"--length", "--amplitude", "--points", "--track-width", "--output", "--name", "--force"});
   const double length = getDouble(o, "--length", 300.0, true);
   const double amplitude = getDouble(o, "--amplitude", 30.0, true);
   const std::size_t points = getCount(o, "--points", 256);
@@ -182,6 +257,66 @@ int runSCurve(int argc, char** argv) {
              std::to_string(points),
          t, {});
   return 0;
+}
+
+std::string widthStats(const std::vector<double>& w) {
+  double lo = w[0], hi = w[0], sum = 0.0;
+  for (double x : w) {
+    lo = std::min(lo, x);
+    hi = std::max(hi, x);
+    sum += x;
+  }
+  char buf[128];
+  std::snprintf(buf, sizeof buf, "min %.4f / mean %.4f / max %.4f m", lo, sum / static_cast<double>(w.size()),
+                hi);
+  return buf;
+}
+
+io::LoadResult loadOrThrow(const std::string& file) {
+  io::LoadResult r = io::loadTrackFile(file);
+  if (!r.ok()) throw FileError{file + ": " + r.error};
+  for (const std::string& w : r.warnings) std::fprintf(stderr, "warning: %s: %s\n", file.c_str(), w.c_str());
+  return r;
+}
+
+int runTrack(int argc, char** argv) {
+  if (argc != 4) throw UsageError{"usage: pathforge-cli track <validate|inspect> <file.json>"};
+  const std::string sub = argv[2];
+  if (sub != "validate" && sub != "inspect") throw UsageError{"unknown track command '" + sub + "'"};
+  const io::LoadResult loaded = loadOrThrow(argv[3]);
+  const geometry::TrackData& d = *loaded.data;
+  const geometry::ValidationReport v = geometry::validateTrackData(d);
+
+  if (sub == "inspect") {
+    std::printf("PathForge track file: %s\n", argv[3]);
+    std::printf("  name                       : %s\n", d.name.c_str());
+    std::printf("  closed                     : %s\n",
+                d.closure == Closure::Closed ? "yes" : "no (open path)");
+    std::printf("  points                     : %zu\n", d.centerline.size());
+    if (!d.leftWidths.empty() && d.leftWidths.size() == d.rightWidths.size()) {
+      std::printf("  left half-width            : %s\n", widthStats(d.leftWidths).c_str());
+      std::printf("  right half-width           : %s\n", widthStats(d.rightWidths).c_str());
+    }
+    if (v.checked.structure) {
+      const Track t = geometry::buildTrack(d);
+      const PathStats st = computeStats(t.centerline());
+      std::printf("  length                     : %.9f m\n", st.length);
+      std::printf("  segment length min / max   : %.9f / %.9f m\n", st.minSegment, st.maxSegment);
+      std::printf("  curvature min / max (signed): %.6e / %.6e 1/m\n", st.minCurvature, st.maxCurvature);
+      std::printf("  |curvature| mean / max     : %.6e / %.6e 1/m\n", st.meanAbsCurvature,
+                  st.maxAbsCurvature);
+      std::printf("  width                      : %s\n", t.hasConstantWidths() ? "constant" : "variable");
+    } else {
+      std::printf("  (geometry statistics unavailable: the data cannot be built into a track)\n");
+    }
+    printValidation(v);
+    return 0;  // inspection succeeded; the validation status is reported, use 'validate' for exit codes
+  }
+
+  std::printf("%s: %s (%zu error(s), %zu warning(s))\n", argv[3], geometry::toString(v.status()),
+              v.errorCount, v.warningCount);
+  printIssues(v);
+  return v.status() == geometry::ValidationStatus::Valid ? 0 : 1;
 }
 
 int fail(const std::string& msg) {
@@ -206,9 +341,13 @@ int main(int argc, char** argv) {
     if (cmd == "circle") return runCircle(argc, argv);
     if (cmd == "oval") return runOval(argc, argv);
     if (cmd == "scurve") return runSCurve(argc, argv);
+    if (cmd == "track") return runTrack(argc, argv);
     return fail("unknown command '" + cmd + "'");
   } catch (const UsageError& e) {
     return fail(e.message);
+  } catch (const FileError& e) {
+    std::fprintf(stderr, "error: %s\n", e.message.c_str());
+    return 3;
   } catch (const GeometryError& e) {
     return fail(e.what());
   }
