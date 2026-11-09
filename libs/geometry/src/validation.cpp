@@ -2,6 +2,7 @@
 #include <cmath>
 #include <limits>
 #include <map>
+#include <pathforge/geometry/surface.hpp>
 #include <pathforge/geometry/validation.hpp>
 #include <sstream>
 
@@ -52,9 +53,18 @@ const char* relationName(SegmentRelation r) {
   return "meet";
 }
 
+// Boundary/centerline segment i and corridor strip i share an index; `implicated` records which strips a
+// boundary-level issue already explains, so that the surface check does not report the same defect a second
+// time.
+void mark(std::vector<char>& implicated, std::size_t strip) {
+  if (strip < implicated.size()) implicated[strip] = 1;
+}
+
 void reportSelf(Collector& c, const std::vector<Vec2>& pts, Closure closure, PolylineId id, TrackIssue type,
-                const char* what) {
+                const char* what, std::vector<char>& implicated) {
   for (const SegmentPairContact& k : findSelfIntersections(pts, closure)) {
+    mark(implicated, k.first);
+    mark(implicated, k.second);
     std::ostringstream m;
     m << what << " segments " << k.first << " and " << k.second << " " << relationName(k.relation) << " near "
       << at(k.point);
@@ -63,8 +73,11 @@ void reportSelf(Collector& c, const std::vector<Vec2>& pts, Closure closure, Pol
 }
 
 void reportCross(Collector& c, const std::vector<Vec2>& a, PolylineId ida, const std::vector<Vec2>& b,
-                 PolylineId idb, Closure closure, TrackIssue type, const char* what) {
+                 PolylineId idb, Closure closure, TrackIssue type, const char* what,
+                 std::vector<char>& implicated) {
   for (const SegmentPairContact& k : findContacts(a, closure, b, closure)) {
+    mark(implicated, k.first);
+    mark(implicated, k.second);
     std::ostringstream m;
     m << what << ": segment " << k.first << " and segment " << k.second << " " << relationName(k.relation)
       << " near " << at(k.point);
@@ -110,17 +123,21 @@ void geometricChecks(const Track& t, const ValidationOptions& opt, Collector& c,
     rightZero = rightZero || t.rightWidths()[i] == 0.0;
   }
 
-  reportSelf(c, cl, closure, PolylineId::Centerline, TrackIssue::CenterlineSelfIntersection, "centerline");
+  const std::size_t stripCount = path.segmentCount();  // corridor strips: one per centerline segment
+  std::vector<char> implicated(stripCount, 0);         // strips already explained by a boundary-level issue
+
+  reportSelf(c, cl, closure, PolylineId::Centerline, TrackIssue::CenterlineSelfIntersection, "centerline",
+             implicated);
   r.checked.centerline = true;
   reportSelf(c, L, closure, PolylineId::LeftBoundary, TrackIssue::LeftBoundarySelfIntersection,
-             "left boundary");
+             "left boundary", implicated);
   reportSelf(c, R, closure, PolylineId::RightBoundary, TrackIssue::RightBoundarySelfIntersection,
-             "right boundary");
+             "right boundary", implicated);
   r.checked.boundaries = true;
 
   const std::size_t crossingsBefore = r.errorCount;
   reportCross(c, L, PolylineId::LeftBoundary, R, PolylineId::RightBoundary, closure,
-              TrackIssue::BoundaryCrossing, "left/right boundaries");
+              TrackIssue::BoundaryCrossing, "left/right boundaries", implicated);
   const bool crossed = r.errorCount > crossingsBefore;
   r.checked.crossings = true;
 
@@ -128,11 +145,11 @@ void geometricChecks(const Track& t, const ValidationOptions& opt, Collector& c,
   // an error); skipping it avoids a flood of redundant overlap reports, and the group stays unchecked.
   if (!leftZero) {
     reportCross(c, L, PolylineId::LeftBoundary, cl, PolylineId::Centerline, closure,
-                TrackIssue::BoundaryCollapse, "left boundary reaches the centerline");
+                TrackIssue::BoundaryCollapse, "left boundary reaches the centerline", implicated);
   }
   if (!rightZero) {
     reportCross(c, R, PolylineId::RightBoundary, cl, PolylineId::Centerline, closure,
-                TrackIssue::BoundaryCollapse, "right boundary reaches the centerline");
+                TrackIssue::BoundaryCollapse, "right boundary reaches the centerline", implicated);
   }
   r.checked.collapse = !leftZero && !rightZero;
 
@@ -145,11 +162,13 @@ void geometricChecks(const Track& t, const ValidationOptions& opt, Collector& c,
       std::ostringstream m;
       m << "left boundary segment " << i << " is reversed relative to the centerline near " << at(L[i]);
       c.add(TrackIssue::LocalBoundaryFold, Severity::Error, {{PolylineId::LeftBoundary, i}}, L[i], m.str());
+      mark(implicated, i);
     }
     if (dot(R[j] - R[i], cs) <= 0.0) {
       std::ostringstream m;
       m << "right boundary segment " << i << " is reversed relative to the centerline near " << at(R[i]);
       c.add(TrackIssue::LocalBoundaryFold, Severity::Error, {{PolylineId::RightBoundary, i}}, R[i], m.str());
+      mark(implicated, i);
     }
   }
   for (std::size_t i = 0; i < n; ++i) {
@@ -209,6 +228,13 @@ void geometricChecks(const Track& t, const ValidationOptions& opt, Collector& c,
         << cm.vertexClearance[worst] << " m (configured width there "
         << t.leftWidths()[worst] + t.rightWidths()[worst] << " m)";
       c.add(type, sev, {}, cl[worst], m.str());
+      if (type == TrackIssue::BoundaryCollapse && stripCount > 0) {
+        // The strips touching a collapsed vertex are part of the same defect.
+        for (std::size_t v = i; v < j; ++v) {
+          mark(implicated, v);
+          mark(implicated, (v + stripCount - 1) % stripCount);
+        }
+      }
       i = j;
     }
   };
@@ -234,6 +260,55 @@ void geometricChecks(const Track& t, const ValidationOptions& opt, Collector& c,
       c.add(TrackIssue::NarrowSection, Severity::Warning, {}, cl[worst], m.str());
       i = j;
     }
+  }
+
+  // Corridor surface: strips between corresponding left/right samples. Strips touching a zero-width sample
+  // are skipped (already an InvalidWidth error) and the group then counts as not run.
+  SurfaceOptions so;
+  so.skipStrip.assign(stripCount, 0);
+  bool anyZero = false;
+  for (std::size_t i = 0; i < stripCount; ++i) {
+    const std::size_t j = (i + 1) % n;
+    if (t.leftWidths()[i] == 0.0 || t.rightWidths()[i] == 0.0 || t.leftWidths()[j] == 0.0 ||
+        t.rightWidths()[j] == 0.0) {
+      so.skipStrip[i] = 1;
+      anyZero = true;
+    }
+  }
+  const SurfaceAnalysis sa = analyzeSurface(L, R, closure, so);
+  r.checked.surface = !anyZero;
+  for (const StripDefect& d : sa.defects) {
+    if (d.kind == StripDefectKind::Overlap) continue;  // clustered below
+    if (implicated[d.strip]) {
+      ++r.surfaceDefectsMerged;
+      continue;
+    }
+    std::ostringstream m;
+    if (d.kind == StripDefectKind::Folded) {
+      m << "corridor strip " << d.strip << " is folded (reversed or self-intersecting) near "
+        << at(d.location);
+      c.add(TrackIssue::FoldedTrackStrip, Severity::Error, {{PolylineId::Surface, d.strip}}, d.location,
+            m.str());
+    } else {
+      m << "corridor strip " << d.strip << " has collapsed to (almost) zero area near " << at(d.location);
+      c.add(TrackIssue::DegenerateTrackStrip, Severity::Error, {{PolylineId::Surface, d.strip}}, d.location,
+            m.str());
+    }
+  }
+  for (const OverlapRegion& region : clusterOverlaps(sa.defects, sa.stripCount, closed)) {
+    const bool explained = std::any_of(region.strips.begin(), region.strips.end(),
+                                       [&](std::size_t k) { return k < implicated.size() && implicated[k]; });
+    if (explained) {
+      ++r.surfaceDefectsMerged;
+      continue;
+    }
+    std::ostringstream m;
+    m << "track surface overlaps itself: strips " << region.firstA << ".." << region.lastA << " and "
+      << region.firstB << ".." << region.lastB << " cover a common area near " << at(region.location) << " ("
+      << region.pairCount << " strip pair(s))";
+    c.add(TrackIssue::SurfaceOverlap, Severity::Error,
+          {{PolylineId::Surface, region.firstA}, {PolylineId::Surface, region.firstB}}, region.location,
+          m.str());
   }
 }
 
@@ -328,6 +403,16 @@ const char* toString(TrackIssue issue) {
       return "LocalBoundaryFold";
     case TrackIssue::NarrowSection:
       return "NarrowSection";
+    case TrackIssue::SurfaceOverlap:
+      return "SurfaceOverlap";
+    case TrackIssue::FoldedTrackStrip:
+      return "FoldedTrackStrip";
+    case TrackIssue::DegenerateTrackStrip:
+      return "DegenerateTrackStrip";
+    case TrackIssue::InvalidSplineDerivative:
+      return "InvalidSplineDerivative";
+    case TrackIssue::CurvatureEvaluationFailure:
+      return "CurvatureEvaluationFailure";
   }
   return "Unknown";
 }

@@ -10,6 +10,7 @@ add_library(pathforge_geometry STATIC
   src/width_profile.cpp
   src/track_data.cpp
   src/predicates.cpp
+  src/surface.cpp
   src/validation.cpp
 )
 add_library(pathforge::geometry ALIAS pathforge_geometry)

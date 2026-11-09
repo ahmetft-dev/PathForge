@@ -25,9 +25,17 @@ enum class TrackIssue {
   BoundaryCollapse,   ///< a boundary meets the centerline, or clearance is ~0
   LocalBoundaryFold,  ///< offset segment reversed, or offset >= local radius of curvature
   NarrowSection,      ///< actual clearance below the (generic) narrow-width threshold
+  SurfaceOverlap,     ///< corridor strips cover a common area (see surface.hpp); one issue per overlap REGION
+  FoldedTrackStrip,   ///< a corridor strip is reversed (left/right swapped) or self-intersecting
+  DegenerateTrackStrip,        ///< a corridor strip has collapsed to (almost) zero area
+  InvalidSplineDerivative,     ///< the interpolating spline has (almost) zero velocity: a cusp / stationary
+                               ///< point
+  CurvatureEvaluationFailure,  ///< the analytic curvature of the interpolating spline is not finite
 };
 
-enum class PolylineId { Centerline, LeftBoundary, RightBoundary };
+/// Surface: `index` is a corridor STRIP (the quadrilateral between boundary samples i and i+1), see
+/// surface.hpp.
+enum class PolylineId { Centerline, LeftBoundary, RightBoundary, Surface };
 
 /// A segment of one of the track's polylines (segment i joins vertex i and i+1 (mod n)).
 struct SegmentRef {
@@ -54,8 +62,10 @@ struct CheckCoverage {
   bool collapse = false;    ///< boundary-vs-centerline contacts
   bool localFolds = false;  ///< reversed offset segments / radius-of-curvature margin
   bool clearance = false;   ///< clearance metrics + narrow sections
+  bool surface = false;     ///< corridor-strip checks: degenerate, folded and overlapping strips
   bool all() const {
-    return structure && centerline && boundaries && crossings && collapse && localFolds && clearance;
+    return structure && centerline && boundaries && crossings && collapse && localFolds && clearance &&
+           surface;
   }
 };
 
@@ -101,6 +111,9 @@ struct ValidationReport {
   std::size_t errorCount = 0;  ///< all errors found (including ones not listed due to the cap)
   std::size_t warningCount = 0;
   std::size_t suppressed = 0;  ///< issues found but not listed because of maxIssuesPerType
+  /// Surface defects NOT listed because a boundary-level issue already explains them (a strip implicated in a
+  /// boundary self-intersection, crossing, fold or collapse). Counted, never silently dropped.
+  std::size_t surfaceDefectsMerged = 0;
   CheckCoverage checked;
   ClearanceMetrics clearance;
 

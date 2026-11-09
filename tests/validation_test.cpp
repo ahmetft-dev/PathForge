@@ -270,7 +270,7 @@ TEST(Validation, StatusDistinguishesValidInvalidAndIncomplete) {
   ValidationReport r;
   r.checked.structure = true;
   EXPECT_EQ(r.status(), ValidationStatus::Incomplete);  // nothing found, but not everything was checked
-  r.checked = CheckCoverage{true, true, true, true, true, true, true};
+  r.checked = CheckCoverage{true, true, true, true, true, true, true, true};
   EXPECT_EQ(r.status(), ValidationStatus::Valid);
   r.errorCount = 1;
   EXPECT_EQ(r.status(), ValidationStatus::Invalid);
@@ -290,4 +290,73 @@ TEST(Validation, VariableWidthTrackIsValidatedPerVertex) {
   const ValidationIssue* i = first(bad, TrackIssue::InvalidWidth);
   ASSERT_NE(i, nullptr);
   EXPECT_NE(i->message.find("100"), std::string::npos);
+}
+
+// ---- Corridor surface (Phase 1D) --------------------------------------------------------------------------
+
+namespace {
+std::size_t surfaceIssues(const ValidationReport& r) {
+  return count(r, TrackIssue::SurfaceOverlap) + count(r, TrackIssue::FoldedTrackStrip) +
+         count(r, TrackIssue::DegenerateTrackStrip);
+}
+}  // namespace
+
+TEST(ValidationSurface, WellFormedClosedAndOpenTracksHaveNoSurfaceIssues) {
+  // The closed circle is an annulus: its first and last strips are adjacent through the seam and the inner
+  // and outer boundary never meet, so nothing may be reported.
+  for (const Track& t : {Track::create(makeCircle(100.0, 360), 5.0, 5.0),
+                         Track::create(makeStadium(300.0, 120.0, 512), 5.0, 5.0),
+                         Track::create(makeSCurve(300.0, 30.0, 256), 5.0, 5.0)}) {
+    const ValidationReport r = validateTrack(t);
+    EXPECT_TRUE(r.checked.surface);
+    EXPECT_EQ(surfaceIssues(r), 0u);
+    EXPECT_EQ(r.surfaceDefectsMerged, 0u);
+    EXPECT_EQ(r.status(), ValidationStatus::Valid);
+  }
+}
+
+TEST(ValidationSurface, OverlappingLegsAreInvalidWithoutDuplicateSurfaceDiagnostics) {
+  // Legs 4 m apart with a 5 m half-width: the corridors of neighbouring legs overlap over the whole length.
+  const TrackData d = dataOf(serpentine(4.0, 80.0), Closure::Open, 5.0, 5.0);
+  const ValidationReport r = validateTrackData(d);
+  EXPECT_EQ(r.status(), ValidationStatus::Invalid);
+  EXPECT_GT(count(r, TrackIssue::BoundaryCrossing) + surfaceIssues(r), 0u);
+  // Every overlapping strip pair here is a consequence of boundary-level defects that are already reported
+  // (crossings, folds, collapse); the surface group must merge them instead of adding a second diagnostic
+  // each.
+  EXPECT_EQ(surfaceIssues(r), 0u);
+  EXPECT_GT(r.surfaceDefectsMerged, 0u);
+}
+
+TEST(ValidationSurface, SurfaceDefectsExplainedByBoundaryIssuesAreMergedNotDuplicated) {
+  // A 180-degree turn of radius 3 with a 6 m inner half-width: the inner boundary folds (reported as a local
+  // fold / boundary crossing); the strips involved must be counted as merged, not reported again.
+  const TrackData d = dataOf(serpentine(6.0, 40.0), Closure::Open, 6.0, 1.0);
+  const ValidationReport r = validateTrackData(d);
+  EXPECT_EQ(r.status(), ValidationStatus::Invalid);
+  const std::size_t boundaryLevel =
+      count(r, TrackIssue::LocalBoundaryFold) + count(r, TrackIssue::BoundaryCrossing) +
+      count(r, TrackIssue::LeftBoundarySelfIntersection) + count(r, TrackIssue::BoundaryCollapse);
+  EXPECT_GT(boundaryLevel, 0u);
+  EXPECT_EQ(surfaceIssues(r), 0u);
+  EXPECT_GT(r.surfaceDefectsMerged, 0u);
+}
+
+TEST(ValidationSurface, ZeroWidthSamplesSkipTheSurfaceGroupAndStayIncompleteOrInvalid) {
+  TrackData d = dataOf({{0, 0}, {10, 0}, {20, 0}, {30, 0}}, Closure::Open, 2.0, 2.0);
+  d.leftWidths[1] = 0.0;
+  const ValidationReport r = validateTrackData(d);
+  EXPECT_FALSE(r.checked.surface);
+  EXPECT_FALSE(r.checked.all());
+  EXPECT_EQ(count(r, TrackIssue::InvalidWidth), 1u);
+  EXPECT_EQ(surfaceIssues(r),
+            0u);  // the strips around the zero-width sample are skipped, not double-reported
+}
+
+TEST(ValidationSurface, IssueNamesAreStable) {
+  EXPECT_STREQ(toString(TrackIssue::SurfaceOverlap), "SurfaceOverlap");
+  EXPECT_STREQ(toString(TrackIssue::FoldedTrackStrip), "FoldedTrackStrip");
+  EXPECT_STREQ(toString(TrackIssue::DegenerateTrackStrip), "DegenerateTrackStrip");
+  EXPECT_STREQ(toString(TrackIssue::InvalidSplineDerivative), "InvalidSplineDerivative");
+  EXPECT_STREQ(toString(TrackIssue::CurvatureEvaluationFailure), "CurvatureEvaluationFailure");
 }
