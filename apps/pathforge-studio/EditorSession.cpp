@@ -28,17 +28,17 @@ class AddPointCommand : public QUndoCommand {
   AddPointCommand(EditorSession* s, std::size_t index, pg::Vec2 position, double left, double right)
       : QUndoCommand("Add point"), s_(s), index_(index), position_(position), left_(left), right_(right) {}
   void redo() override {
-    UndoAccess::mutate(s_, [&](pfe::TrackDocument& d) {
+    UndoAccess::mutate(s_, [&](pfe::TrackDocument& doc) {
       if (id_ == 0) {
-        id_ = d.insertPoint(index_, position_, left_, right_);
+        id_ = doc.insertPoint(index_, position_, left_, right_);
       } else {
-        d.restorePoint(index_, {id_, position_, left_, right_});
+        doc.restorePoint(index_, {id_, position_, left_, right_});
       }
     });
     UndoAccess::select(s_, id_);
   }
   void undo() override {
-    UndoAccess::mutate(s_, [&](pfe::TrackDocument& d) { d.removePoint(id_); });
+    UndoAccess::mutate(s_, [&](pfe::TrackDocument& doc) { doc.removePoint(id_); });
   }
   pfe::PointId pointId() const { return id_; }
 
@@ -54,13 +54,13 @@ class RemovePointCommand : public QUndoCommand {
  public:
   RemovePointCommand(EditorSession* s, pfe::PointId id) : QUndoCommand("Delete point"), s_(s), id_(id) {}
   void redo() override {
-    UndoAccess::mutate(s_, [&](pfe::TrackDocument& d) {
-      index_ = *d.indexOf(id_);
-      point_ = d.removePoint(id_);
+    UndoAccess::mutate(s_, [&](pfe::TrackDocument& doc) {
+      index_ = *doc.indexOf(id_);
+      point_ = doc.removePoint(id_);
     });
   }
   void undo() override {
-    UndoAccess::mutate(s_, [&](pfe::TrackDocument& d) { d.restorePoint(index_, point_); });
+    UndoAccess::mutate(s_, [&](pfe::TrackDocument& doc) { doc.restorePoint(index_, point_); });
     UndoAccess::select(s_, id_);
   }
 
@@ -83,11 +83,11 @@ class MovePointCommand : public QUndoCommand {
       first_ = false;
       return;
     }
-    UndoAccess::mutate(s_, [&](pfe::TrackDocument& d) { d.movePoint(id_, to_); });
+    UndoAccess::mutate(s_, [&](pfe::TrackDocument& doc) { doc.movePoint(id_, to_); });
     UndoAccess::select(s_, id_);
   }
   void undo() override {
-    UndoAccess::mutate(s_, [&](pfe::TrackDocument& d) { d.movePoint(id_, from_); });
+    UndoAccess::mutate(s_, [&](pfe::TrackDocument& doc) { doc.movePoint(id_, from_); });
     UndoAccess::select(s_, id_);
   }
 
@@ -111,10 +111,10 @@ class SetWidthsCommand : public QUndoCommand {
     return true;
   }
   void redo() override {
-    UndoAccess::mutate(s_, [&](pfe::TrackDocument& d) { d.setPointWidths(id_, l1_, r1_); });
+    UndoAccess::mutate(s_, [&](pfe::TrackDocument& doc) { doc.setPointWidths(id_, l1_, r1_); });
   }
   void undo() override {
-    UndoAccess::mutate(s_, [&](pfe::TrackDocument& d) { d.setPointWidths(id_, l0_, r0_); });
+    UndoAccess::mutate(s_, [&](pfe::TrackDocument& doc) { doc.setPointWidths(id_, l0_, r0_); });
     UndoAccess::select(s_, id_);
   }
 
@@ -135,13 +135,13 @@ class SetAllWidthsCommand : public QUndoCommand {
   SetAllWidthsCommand(EditorSession* s, std::vector<Old> old, double left, double right)
       : QUndoCommand("Set all widths"), s_(s), old_(std::move(old)), l_(left), r_(right) {}
   void redo() override {
-    UndoAccess::mutate(s_, [&](pfe::TrackDocument& d) {
-      for (const Old& o : old_) d.setPointWidths(o.id, l_, r_);
+    UndoAccess::mutate(s_, [&](pfe::TrackDocument& doc) {
+      for (const Old& o : old_) doc.setPointWidths(o.id, l_, r_);
     });
   }
   void undo() override {
-    UndoAccess::mutate(s_, [&](pfe::TrackDocument& d) {
-      for (const Old& o : old_) d.setPointWidths(o.id, o.left, o.right);
+    UndoAccess::mutate(s_, [&](pfe::TrackDocument& doc) {
+      for (const Old& o : old_) doc.setPointWidths(o.id, o.left, o.right);
     });
   }
 
@@ -159,10 +159,10 @@ class SetClosureCommand : public QUndoCommand {
         from_(from),
         to_(to) {}
   void redo() override {
-    UndoAccess::mutate(s_, [&](pfe::TrackDocument& d) { d.setClosure(to_); });
+    UndoAccess::mutate(s_, [&](pfe::TrackDocument& doc) { doc.setClosure(to_); });
   }
   void undo() override {
-    UndoAccess::mutate(s_, [&](pfe::TrackDocument& d) { d.setClosure(from_); });
+    UndoAccess::mutate(s_, [&](pfe::TrackDocument& doc) { doc.setClosure(from_); });
   }
 
  private:
@@ -175,10 +175,10 @@ class SetSettingsCommand : public QUndoCommand {
   SetSettingsCommand(EditorSession* s, pfe::GeometrySettings from, pfe::GeometrySettings to)
       : QUndoCommand("Change geometry settings"), s_(s), from_(from), to_(to) {}
   void redo() override {
-    UndoAccess::mutate(s_, [&](pfe::TrackDocument& d) { d.setSettings(to_); });
+    UndoAccess::mutate(s_, [&](pfe::TrackDocument& doc) { doc.setSettings(to_); });
   }
   void undo() override {
-    UndoAccess::mutate(s_, [&](pfe::TrackDocument& d) { d.setSettings(from_); });
+    UndoAccess::mutate(s_, [&](pfe::TrackDocument& doc) { doc.setSettings(from_); });
   }
 
  private:
@@ -196,10 +196,10 @@ class SetNameCommand : public QUndoCommand {
     return true;
   }
   void redo() override {
-    UndoAccess::mutate(s_, [&](pfe::TrackDocument& d) { d.setName(to_); });
+    UndoAccess::mutate(s_, [&](pfe::TrackDocument& doc) { doc.setName(to_); });
   }
   void undo() override {
-    UndoAccess::mutate(s_, [&](pfe::TrackDocument& d) { d.setName(from_); });
+    UndoAccess::mutate(s_, [&](pfe::TrackDocument& doc) { doc.setName(from_); });
   }
 
  private:
@@ -350,7 +350,8 @@ void EditorSession::replaceDocument(pfe::TrackDocument document, const QString& 
 
 std::optional<pfe::PointId> EditorSession::appendPoint(pg::Vec2 p) {
   QString why;
-  if (!dryRun(doc_, [&](pfe::TrackDocument& d) { d.appendPoint(p, defaultLeft_, defaultRight_); }, &why)) {
+  if (!dryRun(
+          doc_, [&](pfe::TrackDocument& doc) { doc.appendPoint(p, defaultLeft_, defaultRight_); }, &why)) {
     emit editRejected(why);
     return std::nullopt;
   }
@@ -366,7 +367,8 @@ std::optional<pfe::PointId> EditorSession::insertNear(pg::Vec2 p, double maxDist
   const double left = target->leftWidth, right = target->rightWidth;
   QString why;
   if (!dryRun(
-          doc_, [&](pfe::TrackDocument& d) { d.insertPoint(target->index, target->position, left, right); },
+          doc_,
+          [&](pfe::TrackDocument& doc) { doc.insertPoint(target->index, target->position, left, right); },
           &why)) {
     emit editRejected(why);
     return std::nullopt;
@@ -388,13 +390,13 @@ bool EditorSession::removePoint(pfe::PointId id) {
 bool EditorSession::setPointPosition(pfe::PointId id, pg::Vec2 p) {
   const pfe::ControlPoint* cp = doc_.find(id);
   QString why;
-  if (!cp || !dryRun(doc_, [&](pfe::TrackDocument& d) { d.movePoint(id, p); }, &why)) {
+  if (!cp || !dryRun(doc_, [&](pfe::TrackDocument& doc) { doc.movePoint(id, p); }, &why)) {
     emit editRejected(cp ? why : QString("unknown control point id %1").arg(id));
     return false;
   }
   if (cp->position == p) return true;
   const pg::Vec2 from = cp->position;
-  mutate([&](pfe::TrackDocument& d) { d.movePoint(id, p); });
+  mutate([&](pfe::TrackDocument& doc) { doc.movePoint(id, p); });
   undo_.push(new MovePointCommand(this, id, from, p));
   return true;
 }
@@ -402,7 +404,7 @@ bool EditorSession::setPointPosition(pfe::PointId id, pg::Vec2 p) {
 bool EditorSession::setPointWidths(pfe::PointId id, double left, double right) {
   const pfe::ControlPoint* cp = doc_.find(id);
   QString why;
-  if (!cp || !dryRun(doc_, [&](pfe::TrackDocument& d) { d.setPointWidths(id, left, right); }, &why)) {
+  if (!cp || !dryRun(doc_, [&](pfe::TrackDocument& doc) { doc.setPointWidths(id, left, right); }, &why)) {
     emit editRejected(cp ? why : QString("unknown control point id %1").arg(id));
     return false;
   }
@@ -413,7 +415,7 @@ bool EditorSession::setPointWidths(pfe::PointId id, double left, double right) {
 
 bool EditorSession::setAllWidths(double left, double right) {
   QString why;
-  if (!dryRun(doc_, [&](pfe::TrackDocument& d) { d.checkWidth(left), d.checkWidth(right); }, &why)) {
+  if (!dryRun(doc_, [&](pfe::TrackDocument& doc) { doc.checkWidth(left), doc.checkWidth(right); }, &why)) {
     emit editRejected(why);
     return false;
   }
@@ -435,7 +437,7 @@ bool EditorSession::setClosure(pfe::Closure c) {
 
 bool EditorSession::setSettings(const pfe::GeometrySettings& s) {
   QString why;
-  if (!dryRun(doc_, [&](pfe::TrackDocument& d) { d.setSettings(s); }, &why)) {
+  if (!dryRun(doc_, [&](pfe::TrackDocument& doc) { doc.setSettings(s); }, &why)) {
     emit editRejected(why);
     return false;
   }
@@ -468,8 +470,9 @@ bool EditorSession::beginDrag(pfe::PointId id) {
 
 void EditorSession::dragTo(pg::Vec2 p) {
   if (!drag_) return;
-  mutate(
-      [&](pfe::TrackDocument& d) { d.movePoint(drag_->id, p); });  // live preview: no history, no validation
+  mutate([&](pfe::TrackDocument& doc) {
+    doc.movePoint(drag_->id, p);
+  });  // live preview: no history, no validation
 }
 
 void EditorSession::endDrag() {
