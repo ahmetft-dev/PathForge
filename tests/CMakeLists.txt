@@ -19,6 +19,7 @@ add_executable(pathforge_geometry_tests
   spline_test.cpp
   resample_test.cpp
   frames_test.cpp
+  shapes_test.cpp
 )
 target_link_libraries(pathforge_geometry_tests PRIVATE
   pathforge::geometry pathforge_warnings GTest::gtest_main)

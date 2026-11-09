@@ -4,6 +4,7 @@ add_library(pathforge_geometry STATIC
   src/spline.cpp
   src/resample.cpp
   src/frames.cpp
+  src/shapes.cpp
 )
 add_library(pathforge::geometry ALIAS pathforge_geometry)
 target_include_directories(pathforge_geometry PUBLIC include)
