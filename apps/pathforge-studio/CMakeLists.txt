@@ -8,7 +8,7 @@ add_executable(pathforge-studio
   TrackViewport.h
 )
 target_link_libraries(pathforge-studio PRIVATE
-  pathforge::geometry Qt6::Widgets pathforge_warnings)
+  pathforge::io Qt6::Widgets pathforge_warnings)
 set_target_properties(pathforge-studio PROPERTIES
   WIN32_EXECUTABLE ON
   MACOSX_BUNDLE ON)

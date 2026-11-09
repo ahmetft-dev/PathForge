@@ -4,6 +4,7 @@
 #include <QGraphicsScene>
 #include <QGraphicsView>
 #include <pathforge/geometry/track.hpp>
+#include <pathforge/geometry/validation.hpp>
 
 // 2D track viewport. World coordinates are meters with y up; the scene stores
 // (x, -y) because Qt's y axis points down. No geometry is computed here: the view
@@ -14,7 +15,10 @@ class TrackViewport : public QGraphicsView {
   explicit TrackViewport(QWidget* parent = nullptr);
 
   // Draws centerline and both boundaries. Open centerlines are drawn open (no closing segment).
-  void setTrack(const pathforge::geometry::Track& track);
+  // Issues from `report` are overlaid: affected segments and issue locations (errors red, warnings amber).
+  void setTrack(const pathforge::geometry::Track& track, const pathforge::geometry::ValidationReport& report);
+  // Centers the view on a world position [m] without changing the zoom.
+  void focusOn(double xMeters, double yMeters);
   void fitToView();
   void zoomBy(double factor);
 
